@@ -1,0 +1,3 @@
+rootProject.name = 'coroutines-debugger-agent'
+include 'mylibrary'
+
