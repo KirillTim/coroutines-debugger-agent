@@ -19,16 +19,16 @@ fun main(args: Array<String>) = runBlocking<Unit> {
     log("The answer is ${a.await() * b.await()}")
 }
 
-/*
-import kotlinx.coroutines.experimental.delay
+
+/*import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
 
 fun main(args: Array<String>) = runBlocking<Unit> {
     println("Started!")
     test()
-    /*test(1234)
+    test(1234)
     testInside()
-    println("Done.")*/
+    println("Done.")
 }
 
 suspend fun testInside() {

@@ -25,7 +25,7 @@ repositories {
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
     compile "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.16"
-    compile "org.ow2.asm:asm:5.0.3"
+    compile "org.ow2.asm:asm-all:5.2"
 
     compile project(':mylibrary')
 }
@@ -42,14 +42,8 @@ jar {
     }
 }
 
-task runWithDebugger(type: JavaExec, dependsOn: build) {
-    classpath = sourceSets.test.runtimeClasspath
-    main = "example.CoroutineExampleKt"
-    jvmArgs += ["-Dkotlinx.coroutines.debug"]
-}
-
 task runApp(type: JavaExec, dependsOn: build) {
     classpath = sourceSets.test.runtimeClasspath
     main = "example.CoroutineExampleKt"
-    jvmArgs += ["-javaagent:${jar.getArchivePath()}"]
+    jvmArgs += ["-Dkotlinx.coroutines.debug", "-javaagent:${jar.getArchivePath()}"]
 }
