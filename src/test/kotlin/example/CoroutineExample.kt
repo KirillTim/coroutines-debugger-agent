@@ -1,30 +1,34 @@
 package example
 
+import kotlinx.coroutines.experimental.CoroutineName
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.runBlocking
 import mylibrary.Printer
 
+//fun log(msg: String) = println("[${Thread.currentThread().name}] $msg")
+//
+//fun main(args: Array<String>) = runBlocking<Unit> {
+//    Printer().print()
+//    val a = async(context) {
+//        Thread.currentThread().getId()
+//        log("I'm computing a piece of the answer")
+//        6
+//    }
+//    val b = async(context) {
+//        log("I'm computing another piece of the answer")
+//        7
+//    }
+//    log("The answer is ${a.await() * b.await()}")
+//}
+
+
+import kotlinx.coroutines.experimental.delay
+import kotlinx.coroutines.experimental.runBlocking
+
 fun log(msg: String) = println("[${Thread.currentThread().name}] $msg")
 
 fun main(args: Array<String>) = runBlocking<Unit> {
-    Printer().print()
-    val a = async(context) {
-        log("I'm computing a piece of the answer")
-        6
-    }
-    val b = async(context) {
-        log("I'm computing another piece of the answer")
-        7
-    }
-    log("The answer is ${a.await() * b.await()}")
-}
-
-
-/*import kotlinx.coroutines.experimental.delay
-import kotlinx.coroutines.experimental.runBlocking
-
-fun main(args: Array<String>) = runBlocking<Unit> {
-    println("Started!")
+    log("Started!")
     test()
     test(1234)
     testInside()
@@ -43,4 +47,4 @@ suspend fun test(time: Long) {
 suspend fun test() {
     println("test()")
     delay(1000)
-}*/
+}
