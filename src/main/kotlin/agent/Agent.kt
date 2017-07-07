@@ -1,24 +1,17 @@
 package agent
 
-import org.objectweb.asm.*
-import org.objectweb.asm.ClassWriter.COMPUTE_MAXS
-import org.objectweb.asm.commons.GeneratorAdapter
-import org.objectweb.asm.commons.LocalVariablesSorter
-import org.objectweb.asm.commons.Method
+import javassist.ClassPool
+import javassist.CtMethod
+import javassist.bytecode.Bytecode
+import javassist.bytecode.SignatureAttribute
+import javassist.expr.ExprEditor
+import javassist.expr.MethodCall
+import java.io.File
 import java.lang.instrument.ClassFileTransformer
 import java.lang.instrument.Instrumentation
+import java.nio.file.Paths
 import java.security.ProtectionDomain
 import kotlin.coroutines.experimental.Continuation
-import java.io.PrintStream
-import org.objectweb.asm.tree.LocalVariableNode
-import org.objectweb.asm.tree.MethodNode
-import com.sun.javafx.scene.control.skin.FXVK.detach
-import javassist.CannotCompileException
-import javassist.tools.Callback.insertBefore
-import javassist.CtClass
-import javassist.CtMethod
-import javassist.ClassPool
-import java.lang.instrument.IllegalClassFormatException
 
 
 class Agent {
@@ -36,23 +29,36 @@ class JavasistTransformer : ClassFileTransformer {
         val cc = ClassPool.getDefault().get(className?.replace('/', '.'))
         if (cc.name.contains("example")) {
             for (method in cc.methods) {
-                val sig = method.genericSignature?: continue
-                println("${method.name}: $sig")
-            }
-        }
+                if (isContinuationMethod(method)) {
+                    method.insertBefore("{System.out.println(\"in ${method}\");}")
+                    method.insertBefore("{mylibrary.ObjectPrinter.print(\$\$);}")
+                    method.insertAfter("{System.out.println(\"after ${method}\");}")
+                    //method.insertAfter("{mylibrary.ObjectPrinter.print(\$r);}")
+                } else if (method.name == "doResume") {
+                    method.insertBefore("{mylibrary.ObjectPrinter.print(this.p$);}")
+                    method.insertBefore("{mylibrary.ObjectPrinter.print(this);}")
 
-        val method = cc.getDeclaredMethod("doResume")
-        println(method)
-        method.insertBefore("{System.out.println(\"label:\" + this.label);}")
-        //method.insertBefore("{System.out.println(\"context:\" + this.context);}")
-        method.insertBefore("{System.out.println(\"in thread with id:\" + Thread.currentThread().getId());}")
-        method.insertBefore("{System.out.println(\"coroutine: \" + this.p$.toString());}")
-        /*try {
-            method.insertBefore("{mylibrary.ObjectPrinter.print(this);}")
-        } catch (ex: CannotCompileException) {
-            ex.printStackTrace()
-        }*/
-        //method.insertBefore("{System.out.println(this.p$.parentContext);}")
+                    /*method.instrument(object : ExprEditor() {
+                        override fun edit(m: MethodCall?) {
+                            m ?: return
+                            if (m.signature.contains("Continuation")) {
+                                println(">>>>>>> ${m.signature}, ${m.methodName}, line: ${m.lineNumber}")
+                                println(">>>>>>> index of bytecode: ${m.indexOfBytecode()}")
+                                println(m.method.methodInfo.codeAttribute.codeLength)
+                                m.method.insertAfter("{System.out.println(\"after ${method}\");}")
+                                println(m.method.methodInfo.codeAttribute.codeLength)
+                                //method.insertAt(m.lineNumber, "{System.out.println(\"WHAT\");}")
+                            }
+                            //m.replace(m.where().signature)
+                        }
+                    })*/
+                }
+            }
+            val s = Paths.get("").toAbsolutePath().toString()
+            val cx = cc.toBytecode().copyOf()
+            val file = File(s + "/${className}_modified.class")
+            file.writeBytes(cx)
+        }
         val byteCode = cc.toBytecode()
         cc.detach()
         return byteCode
@@ -60,56 +66,10 @@ class JavasistTransformer : ClassFileTransformer {
 }
 
 
-class PrintContinuationNameAdapter(val access: Int, val method: Method, mv: MethodVisitor) : MethodVisitor(Opcodes.ASM5, mv) {
-
-    val lvs = LocalVariablesSorter(access, method.descriptor, mv)
-    val generator = GeneratorAdapter(access, method, mv)
-
-    override fun visitCode() {
-        generator.getStatic(Type.getType(System::class.java), "out", Type.getType(PrintStream::class.java))
-        generator.push("inside ${method.name}")
-        generator.invokeVirtual(Type.getType(PrintStream::class.java),
-                Method.getMethod("void println (String)"))
-
-    }
-}
-
-class TestTransformer : ClassFileTransformer {
-    override fun transform(loader: ClassLoader?, className: String?, classBeingRedefined: Class<*>?,
-                           protectionDomain: ProtectionDomain?, classfileBuffer: ByteArray?): ByteArray {
-        val reader = ClassReader(classfileBuffer)
-        val writer = ClassWriter(reader, COMPUTE_MAXS)
-        val visitor = MyClassVisitor(writer)
-        reader.accept(visitor, 0)
-        return writer.toByteArray()
-    }
-}
-
-class MyClassVisitor(cv: ClassVisitor) : ClassVisitor(Opcodes.ASM5, cv) {
-    override fun visitMethod(access: Int, name: String?, desc: String?, signature: String?,
-                             exceptions: Array<out String>?): MethodVisitor? {
-        val method = Method(name, desc)
-        val argumentTypes = method.argumentTypes
-        if (name?.contains("resume") == true) {
-            println("method: ${name}")
-            return object : MethodNode(access, name, desc, signature, exceptions) {
-                override fun visitEnd() {
-                    println("visit end")
-                    val locals = localVariables
-                    if (locals != null) {
-                        println("locals for method '${name}'")
-                        for (i in locals) {
-                            val lvn = i as LocalVariableNode
-                            println("name: ${lvn.name}, sig: ${lvn.signature}, index: ${lvn.index}")
-                        }
-                    }
-                    accept(this@MyClassVisitor)
-                }
-            }
-        }
-        /*if (argumentTypes.last() == Type.getType(Continuation::class.java)) {
-            return PrintContinuationNameAdapter(access, method, cv.visitMethod(access, name, desc, signature, exceptions))
-        }*/
-        return cv.visitMethod(access, name, desc, signature, exceptions)
-    }
+fun isContinuationMethod(method: CtMethod?): Boolean {
+    val sig = method?.signature ?: return false
+    val params = SignatureAttribute.toMethodSignature(sig).parameterTypes
+    if (params.size != 1)
+        return false
+    return (params.first() as? SignatureAttribute.ClassType)?.name == Continuation::class.java.canonicalName
 }

@@ -40,6 +40,7 @@ kotlin {
 jar {
     manifest {
         attributes "Premain-Class": "agent.Agent"
+        //attributes "Boot-Class-Path": "mylibrary/build/libs/mylibrary-1.0-SNAPSHOT.jar"
     }
 }
 

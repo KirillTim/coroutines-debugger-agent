@@ -1,0 +1,156 @@
+:mylibrary:compileKotlin UP-TO-DATE
+:mylibrary:compileJava UP-TO-DATE
+:mylibrary:copyMainKotlinClasses UP-TO-DATE
+:mylibrary:processResources UP-TO-DATE
+:mylibrary:classes UP-TO-DATE
+:mylibrary:jar UP-TO-DATE
+:compileKotlin UP-TO-DATE
+:compileJava UP-TO-DATE
+:copyMainKotlinClasses UP-TO-DATE
+:processResources UP-TO-DATE
+:classes UP-TO-DATE
+:jar UP-TO-DATE
+:assemble UP-TO-DATE
+:compileTestKotlin UP-TO-DATE
+:compileTestJava UP-TO-DATE
+:copyTestKotlinClasses UP-TO-DATE
+:processTestResources UP-TO-DATE
+:testClasses UP-TO-DATE
+:test UP-TO-DATE
+:check UP-TO-DATE
+:build UP-TO-DATE
+:runApp
+Agent started.
+>>>>>>> (Lkotlin/coroutines/experimental/Continuation;)Ljava/lang/Object;, test, line: 32
+>>>>>>> index of bytecode: 75
+>>>>>>> (JLkotlin/coroutines/experimental/Continuation;)Ljava/lang/Object;, test, line: 33
+>>>>>>> index of bytecode: 105
+>>>>>>> (Lkotlin/coroutines/experimental/Continuation;)Ljava/lang/Object;, testInside, line: 34
+>>>>>>> index of bytecode: 132
+print fields of Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object> with type: example.CoroutineExampleKt$main$1
+(private) p$ : BlockingCoroutine{Active}@3a82f6ef
+print getters:
+getFacade: DispatchedContinuation[EventLoopImpl@62ee68d8, Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object>]
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+getArity: 2
+getClass: class example.CoroutineExampleKt$main$1
+---------------------------
+print fields of BlockingCoroutine{Active}@3a82f6ef with type: kotlinx.coroutines.experimental.BlockingCoroutine
+(private) eventLoop : EventLoopImpl@62ee68d8
+(private) parentContext : [CoroutineId(1), EventLoopImpl@62ee68d8]
+(private) blockedThread : Thread[main @coroutine#1,5,main]
+(private) privateEventLoop : true
+print getters:
+getEventLoop: EventLoopImpl@62ee68d8
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+while invoking getCompletionExceptionexception: null
+getKey: kotlinx.coroutines.experimental.Job$Key@4678c730
+getClass: class kotlinx.coroutines.experimental.BlockingCoroutine
+---------------------------
+[main @coroutine#1] Started!
+print fields of Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object> with type: example.CoroutineExampleKt$main$1
+(private) p$ : BlockingCoroutine{Active}@3a82f6ef
+print getters:
+getFacade: DispatchedContinuation[EventLoopImpl@62ee68d8, Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object>]
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+getArity: 2
+getClass: class example.CoroutineExampleKt$main$1
+---------------------------
+in javassist.CtMethod@c1b8cbd0[public static final test (Lkotlin/coroutines/experimental/Continuation;)Ljava/lang/Object;]
+test()
+print fields of <can't be printed> with type: example.CoroutineExampleKt$test$2
+data : kotlin.Unit
+exception : null
+print getters:
+getFacade: <can't be printed>
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+getArity: 0
+getClass: class example.CoroutineExampleKt$test$2
+---------------------------
+in javassist.CtMethod@c1b8cbd0[public static final test (Lkotlin/coroutines/experimental/Continuation;)Ljava/lang/Object;]
+print fields of Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object> with type: example.CoroutineExampleKt$main$1
+(private) p$ : BlockingCoroutine{Active}@3a82f6ef
+print getters:
+getFacade: DispatchedContinuation[EventLoopImpl@62ee68d8, Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object>]
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+getArity: 2
+getClass: class example.CoroutineExampleKt$main$1
+---------------------------
+print fields of BlockingCoroutine{Active}@3a82f6ef with type: kotlinx.coroutines.experimental.BlockingCoroutine
+(private) eventLoop : EventLoopImpl@62ee68d8
+(private) parentContext : [CoroutineId(1), EventLoopImpl@62ee68d8]
+(private) blockedThread : Thread[main @coroutine#1,5,main]
+(private) privateEventLoop : true
+print getters:
+getEventLoop: EventLoopImpl@62ee68d8
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+while invoking getCompletionExceptionexception: null
+getKey: kotlinx.coroutines.experimental.Job$Key@4678c730
+getClass: class kotlinx.coroutines.experimental.BlockingCoroutine
+---------------------------
+test(1234)
+print fields of Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object> with type: example.CoroutineExampleKt$main$1
+(private) p$ : BlockingCoroutine{Active}@3a82f6ef
+print getters:
+getFacade: DispatchedContinuation[EventLoopImpl@62ee68d8, Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object>]
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+getArity: 2
+getClass: class example.CoroutineExampleKt$main$1
+---------------------------
+in javassist.CtMethod@c88e29b4[public static final testInside (Lkotlin/coroutines/experimental/Continuation;)Ljava/lang/Object;]
+print fields of <can't be printed> with type: example.CoroutineExampleKt$testInside$1
+data : null
+exception : null
+print getters:
+getFacade: <can't be printed>
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+getArity: 0
+getClass: class example.CoroutineExampleKt$testInside$1
+---------------------------
+in javassist.CtMethod@c1b8cbd0[public static final test (Lkotlin/coroutines/experimental/Continuation;)Ljava/lang/Object;]
+test()
+print fields of <can't be printed> with type: example.CoroutineExampleKt$test$2
+data : kotlin.Unit
+exception : null
+print getters:
+getFacade: <can't be printed>
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+getArity: 0
+getClass: class example.CoroutineExampleKt$test$2
+---------------------------
+in javassist.CtMethod@c1b8cbd0[public static final test (Lkotlin/coroutines/experimental/Continuation;)Ljava/lang/Object;]
+print fields of <can't be printed> with type: example.CoroutineExampleKt$testInside$1
+data : kotlin.Unit
+exception : null
+print getters:
+getFacade: <can't be printed>
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+getArity: 0
+getClass: class example.CoroutineExampleKt$testInside$1
+---------------------------
+in javassist.CtMethod@c88e29b4[public static final testInside (Lkotlin/coroutines/experimental/Continuation;)Ljava/lang/Object;]
+print fields of Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object> with type: example.CoroutineExampleKt$main$1
+(private) p$ : BlockingCoroutine{Active}@3a82f6ef
+print getters:
+getFacade: DispatchedContinuation[EventLoopImpl@62ee68d8, Function2<kotlinx.coroutines.experimental.CoroutineScope, kotlin.coroutines.experimental.Continuation<? super kotlin.Unit>, java.lang.Object>]
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+getArity: 2
+getClass: class example.CoroutineExampleKt$main$1
+---------------------------
+print fields of BlockingCoroutine{Active}@3a82f6ef with type: kotlinx.coroutines.experimental.BlockingCoroutine
+(private) eventLoop : EventLoopImpl@62ee68d8
+(private) parentContext : [CoroutineId(1), EventLoopImpl@62ee68d8]
+(private) blockedThread : Thread[main @coroutine#1,5,main]
+(private) privateEventLoop : true
+print getters:
+getEventLoop: EventLoopImpl@62ee68d8
+getContext: [CoroutineId(1), BlockingCoroutine{Active}@3a82f6ef, EventLoopImpl@62ee68d8]
+while invoking getCompletionExceptionexception: null
+getKey: kotlinx.coroutines.experimental.Job$Key@4678c730
+getClass: class kotlinx.coroutines.experimental.BlockingCoroutine
+---------------------------
+Done.
+
+BUILD SUCCESSFUL
+
+Total time: 2.641 secs
