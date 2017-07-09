@@ -21,18 +21,30 @@ fun log(msg: String) = println("[${Thread.currentThread().name}] $msg")
     log("The answer is ${a.await() * b.await()}")
 }*/
 
+/*fun test(x: String) : String {
+    return x + "bar"
+}
+
+fun main(args: Array<String>) {
+    var x = "foo"
+    println(test(x))
+}*/
 
 fun main(args: Array<String>) = runBlocking<Unit> {
-    ObjectPrinter.foo()
     log("Started!")
     test()
-    test(1234)
+    testTwoArg(1234, "str")
     testInside()
     println("Done.")
 }
 
 suspend fun testInside() {
     test()
+}
+
+suspend fun testTwoArg(time: Long, msg: String) {
+    log(msg)
+    test(time)
 }
 
 suspend fun test(time: Long) {
