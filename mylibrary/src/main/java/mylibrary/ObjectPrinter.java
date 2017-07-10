@@ -9,14 +9,7 @@ import java.lang.reflect.Modifier;
 
 public class ObjectPrinter {
 
-    public static Object isSuspended(Object res) {
-        if (res == IntrinsicsKt.getCOROUTINE_SUSPENDED()) {
-            System.out.println("SUSPENDED");
-        }
-        return res;
-    }
-
-    private static String objToString(Object obj) {
+    public static String objToString(Object obj) {
         String objStr = "<can't be printed>";
         try {
             objStr = "" + obj;

@@ -3,56 +3,58 @@ package example
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
-import mylibrary.ObjectPrinter
-import mylibrary.Printer
 
-fun log(msg: String) = println("[${Thread.currentThread().name}] $msg")
+fun log(msg: String) = println("[${(System.currentTimeMillis() / 1000).toString().drop(7)}: ${Thread.currentThread().name}] $msg")
 
-/*fun main(args: Array<String>) = runBlocking<Unit> {
-    Printer().print()
-    val a = async(context) {
-        log("I'm computing a piece of the answer")
-        6
-    }
-    val b = async(context) {
-        log("I'm computing another piece of the answer")
-        7
-    }
-    log("The answer is ${a.await() * b.await()}")
-}*/
-
-/*fun test(x: String) : String {
-    return x + "bar"
-}
-
-fun main(args: Array<String>) {
-    var x = "foo"
-    println(test(x))
-}*/
+//fun main(args: Array<String>) = runBlocking<Unit> {
+//    val a = async(context) {
+//        log("I'm computing a piece of the answer")
+//        delay(1000)
+//        6
+//    }
+//    val b = async(context) {
+//        log("I'm computing another piece of the answer")
+//        7
+//    }
+//    log("The answer is ${a.await() * b.await()}")
+//}
 
 fun main(args: Array<String>) = runBlocking<Unit> {
     log("Started!")
-    test()
-    testTwoArg(1234, "str")
-    testInside()
+    /*println(1)
+    testNoArgs()
+    println(2)*/
+    testTwoArg(1000, "str")
+    /*println(3)
+    testInside()*/
     println("Done.")
 }
 
 suspend fun testInside() {
-    test()
+    log("testInside")
+    testNoArgs()
+}
+
+suspend fun oneMore(time: Long) {
+    log("oneMore(${time})")
+    test(time)
 }
 
 suspend fun testTwoArg(time: Long, msg: String) {
-    log(msg)
-    test(time)
+    log("testTwoArg($time, $msg)")
+    oneMore(time)
+    log("after test()")
+    testInside()
+    log("after testInside()")
 }
 
 suspend fun test(time: Long) {
     log("test($time)")
-    //delay(time)
+    delay(time)
+    log("after test($time)")
 }
 
-suspend fun test() {
-    log("test()")
-    delay(1000)
+suspend fun testNoArgs() {
+    log("testNoArgs()")
+    delay(500)
 }
