@@ -38,6 +38,9 @@ suspend fun testInside() {
 suspend fun oneMore(time: Long) {
     log("oneMore(${time})")
     test(time)
+    println("after first test($time)")
+    test(time)
+    println("after second test($time)")
 }
 
 suspend fun testTwoArg(time: Long, msg: String) {
