@@ -8,12 +8,11 @@ import kotlin.coroutines.experimental.Continuation
  * @author Kirill Timofeev
  */
 
+fun firstInstructionLineNumber(method: MethodNode) = //FIXME
+        method.instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.line }.min() ?: -1
+
 fun isStateMachineForAnonymousSuspendFunction(method: MethodNode): Boolean { //FIXME
-    if (method.name != "doResume") return false
-    val type = Type.getType(method.desc)
-    val OBJECT_TYPE = Type.getType(Any::class.java)
-    if (type.returnType != OBJECT_TYPE || type.argumentTypes.size != 2
-            || type.argumentTypes[0] != OBJECT_TYPE || type.argumentTypes[1] != Type.getType(Throwable::class.java)) {
+    if (!method.isDoResume()) {
         return false
     }
     val getSuspendedConst = method.instructions.get(0)
@@ -41,6 +40,16 @@ private fun isGetCOROUTINE_SUSPENDED(inst: AbstractInsnNode) =
         inst is MethodInsnNode && inst.name == "getCOROUTINE_SUSPENDED"
                 && inst.owner == "kotlin/coroutines/experimental/intrinsics/IntrinsicsKt"
                 && inst.desc == "()Ljava/lang/Object;"
+
+private val OBJECT_TYPE = Type.getType(Any::class.java)
+private val THROWABLE_TYPE = Type.getType(Throwable::class.java)
+
+fun MethodNode.isDoResume(): Boolean {
+    if (name != "doResume") return false
+    val type = Type.getType(desc)
+    return type.returnType == OBJECT_TYPE && type.argumentTypes.size == 2 // FIXME
+            && type.argumentTypes[0] == OBJECT_TYPE && type.argumentTypes[1] == THROWABLE_TYPE
+}
 
 fun MethodNode.isSuspend() = isSuspend(name, desc)
 

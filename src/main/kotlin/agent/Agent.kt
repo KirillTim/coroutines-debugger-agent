@@ -1,5 +1,8 @@
 package agent
 
+import mylibrary.AnonymousSuspendFunction
+import mylibrary.NamedSuspendFunction
+import mylibrary.suspendFunctions
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
@@ -42,6 +45,11 @@ private fun getCoroutineContext(method: MethodNode): WithContextVar? {
     return ContinuationVar(locals[continuationVarIndex(method) ?: return null])
 }
 
+private fun getCoroutineContextVarIndexForSuspendFunction(method: MethodNode) =
+        getCoroutineContext(method)?.localVar?.index
+                ?: throw IllegalArgumentException("Can't find coroutine context in suspend function ${method.name}")
+
+
 private fun generateAfterSuspendCall(suspendCall: MethodInsnNode, ctxVarIndex: Int, calledFrom: String): InsnList {
     val list = InsnList()
     list.add(InsnNode(Opcodes.DUP))
@@ -53,13 +61,18 @@ private fun generateAfterSuspendCall(suspendCall: MethodInsnNode, ctxVarIndex: I
     return list
 }
 
+private fun generateHandleOnResumeCall(ctxVarIndex: Int, functionName: String): InsnList {
+    val list = InsnList()
+    list.add(IntInsnNode(Opcodes.ALOAD, ctxVarIndex))
+    list.add(LdcInsnNode(functionName))
+    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutineStack", "handleOnResume",
+            "(Ljava/lang/Object;Ljava/lang/String;)V", false))
+    return list
+}
+
 private fun addSuspendCallHandlers(method: MethodNode, classNode: ClassNode) {
     println(">>in method ${classNode.name}.${method.name}")
-    val ctx = getCoroutineContext(method)
-    val ctxIndex = when (ctx) {
-        is WithContextVar -> ctx.localVar.index
-        else -> throw IllegalArgumentException("Can't find coroutine context in suspend function ${method.name}")
-    }
+    val ctxIndex = getCoroutineContextVarIndexForSuspendFunction(method)
     val iter = method.instructions.iterator()
     while (iter.hasNext()) {
         val i = iter.next()
@@ -70,10 +83,59 @@ private fun addSuspendCallHandlers(method: MethodNode, classNode: ClassNode) {
     }
 }
 
+private data class MethodNameDesc(val name: String, val desc: String)
+
+private fun correspondingSuspendFunctionForDoResume(method: MethodNode): MethodNameDesc{ //FIXME
+    if (!method.isDoResume()) {
+        throw IllegalArgumentException("${method.name} should be doResume function")
+    }
+    val aReturn = method.instructions.last.previous
+    val suspendFunctionCall = aReturn.previous
+    if (suspendFunctionCall is MethodInsnNode && suspendFunctionCall.opcode == Opcodes.INVOKESTATIC
+            && aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) {
+        return MethodNameDesc(suspendFunctionCall.name, suspendFunctionCall.desc)
+    }
+    throw IllegalArgumentException("Unexpected end instructions in ${method.name}")
+}
 
 private data class ExtendsImplements(val extends: String?, val implements: List<String>)
 
 private val typesInfo = mutableMapOf<String, ExtendsImplements>() //FIXME
+
+private fun transformMethod(method: MethodNode, classNode: ClassNode) {
+    val isStateMachine = isStateMachineForAnonymousSuspendFunction(method)
+    if (method.isSuspend() || isStateMachine) {
+        addSuspendCallHandlers(method, classNode)
+    }
+    if (method.name == "doResume") {
+        if (!isStateMachine) {
+            val functionName = correspondingSuspendFunctionForDoResume(method)
+            val ctxVarIndex = getCoroutineContextVarIndexForSuspendFunction(method)
+            method.instructions.insert(generateHandleOnResumeCall(ctxVarIndex, functionName.name))
+            method.instructions.insert(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/ObjectPrinter", "printText",
+                    "(Ljava/lang/String;)V", false))
+            method.instructions.insert(LdcInsnNode("doResume call for function $functionName"))
+        }
+        method.instructions.insert(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/ObjectPrinter", "printText",
+                "(Ljava/lang/String;)V", false))
+        method.instructions.insert(LdcInsnNode("called ${classNode.name}.doResume"))
+    }
+}
+
+//println(">>> doResume for $className")
+
+/* val labels = method.instructions.toArray().filterIsInstance<LineNumberNode>()
+         .map { it.start.label!! to it.line }.toMap()
+ val methodCalls = methodCallNodeToLabelNode(method.instructions)
+ if (isStateMachineForAnonymousSuspendFunction(method.instructions)) {
+     println("anonymous suspend lambda in ${classNode.name}")
+     for ((m, label) in methodCalls.filterKeys { it.isSuspend() }) {
+         println("${labels[label.label]} -> ${m.name} : ${m.desc}")
+     }
+ }
+}*/
+
+//val doResume
 
 class TestTransformer : ClassFileTransformer {
     override fun transform(loader: ClassLoader?, className: String?, classBeingRedefined: Class<*>?,
@@ -82,32 +144,19 @@ class TestTransformer : ClassFileTransformer {
         val classNode = ClassNode()
         reader.accept(classNode, 0)
         if (classNode.name.contains("example")) { //FIXME
-            if (!typesInfo.containsKey(classNode.name)) {
-                typesInfo[classNode.name] = ExtendsImplements(classNode.superName, classNode.interfaces.map { it as String })
-            }
+            typesInfo[classNode.name] = ExtendsImplements(classNode.superName, classNode.interfaces.map { it as String })
             println(">> in class ${classNode.name}")
             for (method in classNode.methods.map { it as MethodNode }) {
                 try {
-                    if (method.isSuspend() || isStateMachineForAnonymousSuspendFunction(method)) {
-                        addSuspendCallHandlers(method, classNode)
+                    val function = if (method.isSuspend() && method.name != "invoke" && method.name != "create")
+                        NamedSuspendFunction(method, classNode, classNode.sourceFile, firstInstructionLineNumber(method))
+                    else if (isStateMachineForAnonymousSuspendFunction(method))
+                        AnonymousSuspendFunction(method, classNode, firstInstructionLineNumber(method))
+                    else null
+                    if (function != null) {
+                        suspendFunctions.add(function)
                     }
-                    if (method.name == "doResume") {
-                        method.instructions.insert(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/ObjectPrinter", "printText",
-                                "(Ljava/lang/String;)V", false))
-                        method.instructions.insert(LdcInsnNode("doResume call for class $className"))
-                    }
-                    //println(">>> doResume for $className")
-
-                    /* val labels = method.instructions.toArray().filterIsInstance<LineNumberNode>()
-                             .map { it.start.label!! to it.line }.toMap()
-                     val methodCalls = methodCallNodeToLabelNode(method.instructions)
-                     if (isStateMachineForAnonymousSuspendFunction(method.instructions)) {
-                         println("anonymous suspend lambda in ${classNode.name}")
-                         for ((m, label) in methodCalls.filterKeys { it.isSuspend() }) {
-                             println("${labels[label.label]} -> ${m.name} : ${m.desc}")
-                         }
-                     }
-                 }*/
+                    transformMethod(method, classNode)
                 } catch (e: Exception) {
                     println("exception : $e")
                 }
