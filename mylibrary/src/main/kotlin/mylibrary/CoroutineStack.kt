@@ -11,19 +11,6 @@ import kotlin.coroutines.experimental.intrinsics.COROUTINE_SUSPENDED
  * @author Kirill Timofeev
  */
 
-sealed class UserDefinedSuspendFunction(val methodNode: MethodNode, val fileName: String, val lineNumber: Int)
-
-class AnonymousSuspendFunction(methodNode: MethodNode, val classNode: ClassNode, lineNumber: Int)
-    : UserDefinedSuspendFunction(methodNode, classNode.sourceFile, lineNumber) {
-    override fun toString() = "anonymous in ${classNode.name} : ${methodNode.desc}, defined at $fileName:$lineNumber"
-}
-
-class NamedSuspendFunction(methodNode: MethodNode, val owner: ClassNode, fileName: String, lineNumber: Int)
-    : UserDefinedSuspendFunction(methodNode, fileName, lineNumber) {
-    override fun toString() = "${owner.name}.${methodNode.name} : ${methodNode.desc}, defined at $fileName:$lineNumber"
-}
-
-val suspendFunctions = mutableListOf<UserDefinedSuspendFunction>()
 
 /*sealed class LibrarySuspendFunction(name: String, fileName: String, lineNumber: Int)
     : SuspendFunction(name, fileName, lineNumber)

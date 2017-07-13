@@ -1,5 +1,6 @@
 package agent
 
+import org.objectweb.asm.Opcodes
 import org.objectweb.asm.Type
 import org.objectweb.asm.tree.*
 import kotlin.coroutines.experimental.Continuation
@@ -8,7 +9,29 @@ import kotlin.coroutines.experimental.Continuation
  * @author Kirill Timofeev
  */
 
-fun firstInstructionLineNumber(method: MethodNode) = //FIXME
+sealed class UserDefinedSuspendFunction //(val method: MethodNode, val fileName: String, val lineNumber: Int)
+
+data class AnonymousSuspendFunction(val method: MethodNode, val owner: ClassNode, val lineNumber: Int) : UserDefinedSuspendFunction() {
+    override fun toString() = "anonymous in ${owner.name} : ${method.desc}, defined at ${owner.sourceFile}:$lineNumber"
+}
+
+data class NamedSuspendFunction(val method: MethodNode, val owner: ClassNode, val lineNumber: Int) : UserDefinedSuspendFunction() {
+    override fun toString() = "${owner.name}.${method.name} : ${method.desc}, defined at ${owner.sourceFile}:$lineNumber"
+}
+
+/*class AnonymousSuspendFunction(method: MethodNode, val owner: ClassNode, lineNumber: Int)
+    : UserDefinedSuspendFunction(method, owner.sourceFile, lineNumber) {
+    override fun toString() = "anonymous in ${owner.name} : ${method.desc}, defined at $fileName:$lineNumber"
+}
+
+class NamedSuspendFunction(methodNode: MethodNode, val owner: ClassNode, lineNumber: Int)
+    : UserDefinedSuspendFunction(methodNode, owner.sourceFile, lineNumber) {
+    override fun toString() = "${owner.name}.${methodNode.name} : ${methodNode.desc}, defined at $fileName:$lineNumber"
+}*/
+
+data class MethodNameOwnerDesc(val name: String, val owner: String, val desc: String)
+
+private fun firstInstructionLineNumber(method: MethodNode) = //FIXME
         method.instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.line }.min() ?: -1
 
 fun isStateMachineForAnonymousSuspendFunction(method: MethodNode): Boolean { //FIXME
@@ -21,6 +44,46 @@ fun isStateMachineForAnonymousSuspendFunction(method: MethodNode): Boolean { //F
     val tableSwitch = method.instructions.get(6)
     return isGetCOROUTINE_SUSPENDED(getSuspendedConst) && l0 is LabelNode
             && getLabel is FieldInsnNode && getLabel.name == "label" && tableSwitch is TableSwitchInsnNode
+}
+
+fun correspondingSuspendFunctionForDoResume(method: MethodNode): MethodNameOwnerDesc { //FIXME
+    if (!method.isDoResume()) {
+        throw IllegalArgumentException("${method.name} should be doResume function")
+    }
+    val aReturn = method.instructions.last.previous
+    val suspendFunctionCall = aReturn.previous
+    if (suspendFunctionCall is MethodInsnNode && suspendFunctionCall.opcode == Opcodes.INVOKESTATIC
+            && aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) {
+        return MethodNameOwnerDesc(suspendFunctionCall.name, suspendFunctionCall.owner, suspendFunctionCall.desc)
+    }
+    throw IllegalArgumentException("Unexpected end instructions in ${method.name}")
+}
+
+data class MethodNodeClassNode(val method: MethodNode, val classNode: ClassNode)
+
+val doResumeToSuspendFunction = mutableMapOf<MethodNodeClassNode, UserDefinedSuspendFunction>()
+private val unAssignedDoResumes = mutableMapOf<MethodNameOwnerDesc, MethodNodeClassNode>()
+private val unAssignedSuspendFunctions = mutableSetOf<NamedSuspendFunction>()
+
+fun updateDoResumeToSuspendFunctionMap(method: MethodNode, classNode: ClassNode) {
+    if (isStateMachineForAnonymousSuspendFunction(method)) { //is doResume for itself
+        val anonymous = AnonymousSuspendFunction(method, classNode, firstInstructionLineNumber(method))
+        doResumeToSuspendFunction += (MethodNodeClassNode(method, classNode) to anonymous)
+    } else if (method.isSuspend() && method.name != "invoke" && method.name != "create") {
+        val named = NamedSuspendFunction(method, classNode, firstInstructionLineNumber(method))
+        val key = MethodNameOwnerDesc(named.method.name, named.owner.name, named.method.desc)
+        unAssignedDoResumes.remove(key)?.let {
+            doResumeToSuspendFunction += (it to named)
+        }
+    } else if (method.isDoResume()) {
+        val mnod = correspondingSuspendFunctionForDoResume(method)
+        unAssignedSuspendFunctions.find {
+            it.method.name == mnod.name && it.owner.name == mnod.owner && it.method.desc == mnod.desc
+        }?.let {
+            doResumeToSuspendFunction += (MethodNodeClassNode(method, classNode) to it)
+            unAssignedSuspendFunctions.remove(it)
+        }
+    }
 }
 
 fun methodCallNodeToLabelNode(instructions: InsnList): Map<MethodInsnNode, LabelNode> {
@@ -69,4 +132,17 @@ private fun isSuspend(name: String, desc: String): Boolean {
     return type.argumentTypes.isNotEmpty()
             && (type.argumentTypes.lastIndexOf(CONTINUATION_TYPE) == type.argumentTypes.size - offset)
             && type.returnType == Type.getType(Any::class.java)
+}
+
+fun insertPrint(text: String, instructions: InsnList, insertAfter: AbstractInsnNode? = null): InsnList {
+    val list = InsnList()
+    list.add(FieldInsnNode(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;"))
+    list.add(LdcInsnNode(text))
+    list.add(MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false))
+    if (insertAfter != null) {
+        instructions.insert(insertAfter, list)
+    } else {
+        instructions.insert(list)
+    }
+    return instructions
 }

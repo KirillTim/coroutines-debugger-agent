@@ -1,8 +1,5 @@
 package agent
 
-import mylibrary.AnonymousSuspendFunction
-import mylibrary.NamedSuspendFunction
-import mylibrary.suspendFunctions
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
@@ -83,20 +80,6 @@ private fun addSuspendCallHandlers(method: MethodNode, classNode: ClassNode) {
     }
 }
 
-private data class MethodNameDesc(val name: String, val desc: String)
-
-private fun correspondingSuspendFunctionForDoResume(method: MethodNode): MethodNameDesc{ //FIXME
-    if (!method.isDoResume()) {
-        throw IllegalArgumentException("${method.name} should be doResume function")
-    }
-    val aReturn = method.instructions.last.previous
-    val suspendFunctionCall = aReturn.previous
-    if (suspendFunctionCall is MethodInsnNode && suspendFunctionCall.opcode == Opcodes.INVOKESTATIC
-            && aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) {
-        return MethodNameDesc(suspendFunctionCall.name, suspendFunctionCall.desc)
-    }
-    throw IllegalArgumentException("Unexpected end instructions in ${method.name}")
-}
 
 private data class ExtendsImplements(val extends: String?, val implements: List<String>)
 
@@ -107,18 +90,16 @@ private fun transformMethod(method: MethodNode, classNode: ClassNode) {
     if (method.isSuspend() || isStateMachine) {
         addSuspendCallHandlers(method, classNode)
     }
+    if (method.name == "<init>") {
+        insertPrint("created new ${classNode.name} object", method.instructions)
+    }
     if (method.name == "doResume") {
         if (!isStateMachine) {
             val functionName = correspondingSuspendFunctionForDoResume(method)
             val ctxVarIndex = getCoroutineContextVarIndexForSuspendFunction(method)
             method.instructions.insert(generateHandleOnResumeCall(ctxVarIndex, functionName.name))
-            method.instructions.insert(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/ObjectPrinter", "printText",
-                    "(Ljava/lang/String;)V", false))
-            method.instructions.insert(LdcInsnNode("doResume call for function $functionName"))
+            insertPrint("doResume call for function $functionName", method.instructions)
         }
-        method.instructions.insert(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/ObjectPrinter", "printText",
-                "(Ljava/lang/String;)V", false))
-        method.instructions.insert(LdcInsnNode("called ${classNode.name}.doResume"))
     }
 }
 
@@ -128,7 +109,7 @@ private fun transformMethod(method: MethodNode, classNode: ClassNode) {
          .map { it.start.label!! to it.line }.toMap()
  val methodCalls = methodCallNodeToLabelNode(method.instructions)
  if (isStateMachineForAnonymousSuspendFunction(method.instructions)) {
-     println("anonymous suspend lambda in ${classNode.name}")
+     println("anonymous suspend lambda in ${owner.name}")
      for ((m, label) in methodCalls.filterKeys { it.isSuspend() }) {
          println("${labels[label.label]} -> ${m.name} : ${m.desc}")
      }
@@ -136,6 +117,7 @@ private fun transformMethod(method: MethodNode, classNode: ClassNode) {
 }*/
 
 //val doResume
+
 
 class TestTransformer : ClassFileTransformer {
     override fun transform(loader: ClassLoader?, className: String?, classBeingRedefined: Class<*>?,
@@ -148,14 +130,12 @@ class TestTransformer : ClassFileTransformer {
             println(">> in class ${classNode.name}")
             for (method in classNode.methods.map { it as MethodNode }) {
                 try {
-                    val function = if (method.isSuspend() && method.name != "invoke" && method.name != "create")
-                        NamedSuspendFunction(method, classNode, classNode.sourceFile, firstInstructionLineNumber(method))
-                    else if (isStateMachineForAnonymousSuspendFunction(method))
-                        AnonymousSuspendFunction(method, classNode, firstInstructionLineNumber(method))
-                    else null
-                    if (function != null) {
-                        suspendFunctions.add(function)
+                    updateDoResumeToSuspendFunctionMap(method, classNode)
+                    println("\ndo resume to suspend functions:")
+                    for ((doResume, suspendFunc) in doResumeToSuspendFunction) {
+                        println("${doResume.classNode.name}${doResume.method.name} -> ${suspendFunc}")
                     }
+                    println("\n\n")
                     transformMethod(method, classNode)
                 } catch (e: Exception) {
                     println("exception : $e")

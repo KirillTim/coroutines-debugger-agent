@@ -18,7 +18,8 @@ fun log(msg: String) = println("[${(System.currentTimeMillis() / 1000).toString(
 }*/
 
 fun main(args: Array<String>) = runBlocking<Unit> {
-    log("Started!")
+    println("started")
+    //log("Started!")
     /*println(1)
     testNoArgs()
     println(2)*/
@@ -37,16 +38,19 @@ suspend fun oneMore(time: Long) {
     log("oneMore(${time})")
     test(time)
     println("after first test($time)")
-    test(time)
+    testInside()
     println("after second test($time)")
 }
 
 suspend fun testTwoArg(time: Long, msg: String) {
+    if (time > 10000) {
+        return
+    }
     log("testTwoArg($time, $msg)")
+    testTwoArg(2 * time, "inner $msg")
+    log("after testTwoArg(${2 * time}, ${"inner $msg"})")
     oneMore(time)
-    log("after test()")
-    testInside()
-    log("after testInside()")
+    log("after oneMore(${time})")
 }
 
 suspend fun test(time: Long) {
