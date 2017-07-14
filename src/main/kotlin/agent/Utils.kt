@@ -72,8 +72,11 @@ fun updateDoResumeToSuspendFunctionMap(method: MethodNode, classNode: ClassNode)
     } else if (method.isSuspend() && method.name != "invoke" && method.name != "create") {
         val named = NamedSuspendFunction(method, classNode, firstInstructionLineNumber(method))
         val key = MethodNameOwnerDesc(named.method.name, named.owner.name, named.method.desc)
-        unAssignedDoResumes.remove(key)?.let {
-            doResumeToSuspendFunction += (it to named)
+        val doResume = unAssignedDoResumes.remove(key)
+        if (doResume == null) {
+            unAssignedSuspendFunctions += named
+        } else {
+            doResumeToSuspendFunction += (doResume to named)
         }
     } else if (method.isDoResume()) {
         val mnod = correspondingSuspendFunctionForDoResume(method)
@@ -125,7 +128,7 @@ fun continuationVarIndex(method: MethodNode) =
 
 private fun continuationOffsetFromEndInDesc(name: String) = if (name.endsWith("\$default")) 3 else 1
 
-private fun isSuspend(name: String, desc: String): Boolean {
+private fun isSuspend(name: String, desc: String): Boolean { //TODO: what about invoke ?
     val type = Type.getType(desc)
     val CONTINUATION_TYPE = Type.getType(Continuation::class.java)
     val offset = continuationOffsetFromEndInDesc(name)

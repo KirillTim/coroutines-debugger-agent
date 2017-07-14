@@ -68,7 +68,7 @@ private fun generateHandleOnResumeCall(ctxVarIndex: Int, functionName: String): 
 }
 
 private fun addSuspendCallHandlers(method: MethodNode, classNode: ClassNode) {
-    println(">>in method ${classNode.name}.${method.name}")
+    //println(">>in method ${classNode.name}.${method.name}")
     val ctxIndex = getCoroutineContextVarIndexForSuspendFunction(method)
     val iter = method.instructions.iterator()
     while (iter.hasNext()) {
@@ -88,11 +88,15 @@ private val typesInfo = mutableMapOf<String, ExtendsImplements>() //FIXME
 private fun transformMethod(method: MethodNode, classNode: ClassNode) {
     val isStateMachine = isStateMachineForAnonymousSuspendFunction(method)
     if (method.isSuspend() || isStateMachine) {
-        addSuspendCallHandlers(method, classNode)
+        if (method.name == "invoke") {
+            //insertPrint("invoke call for ${classNode.name}", method.instructions)
+        } else {
+            addSuspendCallHandlers(method, classNode)
+        }
     }
-    if (method.name == "<init>") {
+    /*if (method.name == "<init>") {
         insertPrint("created new ${classNode.name} object", method.instructions)
-    }
+    }*/
     if (method.name == "doResume") {
         if (!isStateMachine) {
             val functionName = correspondingSuspendFunctionForDoResume(method)
@@ -103,22 +107,6 @@ private fun transformMethod(method: MethodNode, classNode: ClassNode) {
     }
 }
 
-//println(">>> doResume for $className")
-
-/* val labels = method.instructions.toArray().filterIsInstance<LineNumberNode>()
-         .map { it.start.label!! to it.line }.toMap()
- val methodCalls = methodCallNodeToLabelNode(method.instructions)
- if (isStateMachineForAnonymousSuspendFunction(method.instructions)) {
-     println("anonymous suspend lambda in ${owner.name}")
-     for ((m, label) in methodCalls.filterKeys { it.isSuspend() }) {
-         println("${labels[label.label]} -> ${m.name} : ${m.desc}")
-     }
- }
-}*/
-
-//val doResume
-
-
 class TestTransformer : ClassFileTransformer {
     override fun transform(loader: ClassLoader?, className: String?, classBeingRedefined: Class<*>?,
                            protectionDomain: ProtectionDomain?, classfileBuffer: ByteArray?): ByteArray {
@@ -127,15 +115,18 @@ class TestTransformer : ClassFileTransformer {
         reader.accept(classNode, 0)
         if (classNode.name.contains("example")) { //FIXME
             typesInfo[classNode.name] = ExtendsImplements(classNode.superName, classNode.interfaces.map { it as String })
-            println(">> in class ${classNode.name}")
+            //println(">>in class ${classNode.name}")
             for (method in classNode.methods.map { it as MethodNode }) {
                 try {
+                    val prevSize = doResumeToSuspendFunction.size
                     updateDoResumeToSuspendFunctionMap(method, classNode)
-                    println("\ndo resume to suspend functions:")
-                    for ((doResume, suspendFunc) in doResumeToSuspendFunction) {
-                        println("${doResume.classNode.name}${doResume.method.name} -> ${suspendFunc}")
+                    if (doResumeToSuspendFunction.size != prevSize) {
+                        println("\ndoResume to suspend functions:")
+                        for ((doResume, suspendFunc) in doResumeToSuspendFunction) {
+                            println("${doResume.classNode.name}${doResume.method.name} -> $suspendFunc")
+                        }
+                        println()
                     }
-                    println("\n\n")
                     transformMethod(method, classNode)
                 } catch (e: Exception) {
                     println("exception : $e")
