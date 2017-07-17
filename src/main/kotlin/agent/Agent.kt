@@ -1,5 +1,6 @@
 package agent
 
+import mylibrary.*
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
@@ -52,16 +53,19 @@ private fun generateAfterSuspendCall(suspendCall: MethodInsnNode, ctxVarIndex: I
     list.add(InsnNode(Opcodes.DUP))
     list.add(IntInsnNode(Opcodes.ALOAD, ctxVarIndex))
     list.add(LdcInsnNode(suspendCall.name))
+    list.add(LdcInsnNode(suspendCall.desc)) //FIXME can find function by this three parameters
+    list.add(LdcInsnNode(suspendCall.owner))
     list.add(LdcInsnNode(calledFrom))
     list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutineStack", "afterSuspendCall",
-            "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;)V", false))
+            "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false))
     return list
 }
 
-private fun generateHandleOnResumeCall(ctxVarIndex: Int, functionName: String): InsnList {
+//each suspend function can be determined by doResume owner class
+private fun generateHandleOnResumeCall(ctxVarIndex: Int, owner: String): InsnList {
     val list = InsnList()
     list.add(IntInsnNode(Opcodes.ALOAD, ctxVarIndex))
-    list.add(LdcInsnNode(functionName))
+    list.add(LdcInsnNode(owner))
     list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutineStack", "handleOnResume",
             "(Ljava/lang/Object;Ljava/lang/String;)V", false))
     return list
@@ -89,20 +93,20 @@ private fun transformMethod(method: MethodNode, classNode: ClassNode) {
     val isStateMachine = isStateMachineForAnonymousSuspendFunction(method)
     if (method.isSuspend() || isStateMachine) {
         if (method.name == "invoke") {
-            //insertPrint("invoke call for ${classNode.name}", method.instructions)
+            //insertPrintln("invoke call for ${classNode.name}", method.instructions)
         } else {
             addSuspendCallHandlers(method, classNode)
         }
     }
     /*if (method.name == "<init>") {
-        insertPrint("created new ${classNode.name} object", method.instructions)
+        insertPrintln("created new ${classNode.name} object", method.instructions)
     }*/
     if (method.name == "doResume") {
         if (!isStateMachine) {
-            val functionName = correspondingSuspendFunctionForDoResume(method)
+            val function = correspondingSuspendFunctionForDoResume(method)
             val ctxVarIndex = getCoroutineContextVarIndexForSuspendFunction(method)
-            method.instructions.insert(generateHandleOnResumeCall(ctxVarIndex, functionName.name))
-            insertPrint("doResume call for function $functionName", method.instructions)
+            method.instructions.insert(generateHandleOnResumeCall(ctxVarIndex, function.owner))
+            //insertPrintln("doResume call for function $function", method.instructions)
         }
     }
 }
@@ -121,11 +125,11 @@ class TestTransformer : ClassFileTransformer {
                     val prevSize = doResumeToSuspendFunction.size
                     updateDoResumeToSuspendFunctionMap(method, classNode)
                     if (doResumeToSuspendFunction.size != prevSize) {
-                        println("\ndoResume to suspend functions:")
+                        /*println("\ndoResume to suspend functions:")
                         for ((doResume, suspendFunc) in doResumeToSuspendFunction) {
                             println("${doResume.classNode.name}${doResume.method.name} -> $suspendFunc")
                         }
-                        println()
+                        println()*/
                     }
                     transformMethod(method, classNode)
                 } catch (e: Exception) {
