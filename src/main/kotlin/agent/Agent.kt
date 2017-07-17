@@ -56,18 +56,20 @@ private fun generateAfterSuspendCall(suspendCall: MethodInsnNode, ctxVarIndex: I
     list.add(LdcInsnNode(suspendCall.desc)) //FIXME can find function by this three parameters
     list.add(LdcInsnNode(suspendCall.owner))
     list.add(LdcInsnNode(calledFrom))
-    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutineStack", "afterSuspendCall",
+    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutineStacks", "afterSuspendCall",
             "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false))
     return list
 }
 
 //each suspend function can be determined by doResume owner class
-private fun generateHandleOnResumeCall(ctxVarIndex: Int, owner: String): InsnList {
+private fun generateHandleDoResumeCall(ctxVarIndex: Int, forFunction: MethodNameOwnerDesc): InsnList {
     val list = InsnList()
     list.add(IntInsnNode(Opcodes.ALOAD, ctxVarIndex))
-    list.add(LdcInsnNode(owner))
-    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutineStack", "handleOnResume",
-            "(Ljava/lang/Object;Ljava/lang/String;)V", false))
+    list.add(LdcInsnNode(forFunction.name))
+    list.add(LdcInsnNode(forFunction.owner))
+    list.add(LdcInsnNode(forFunction.desc))
+    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutineStacks", "handleDoResume",
+            "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false))
     return list
 }
 
@@ -102,12 +104,13 @@ private fun transformMethod(method: MethodNode, classNode: ClassNode) {
         insertPrintln("created new ${classNode.name} object", method.instructions)
     }*/
     if (method.name == "doResume") {
-        if (!isStateMachine) {
-            val function = correspondingSuspendFunctionForDoResume(method)
-            val ctxVarIndex = getCoroutineContextVarIndexForSuspendFunction(method)
-            method.instructions.insert(generateHandleOnResumeCall(ctxVarIndex, function.owner))
-            //insertPrintln("doResume call for function $function", method.instructions)
-        }
+        val ctxVarIndex = getCoroutineContextVarIndexForSuspendFunction(method)
+        val function = if (isStateMachineForAnonymousSuspendFunction(method))
+            MethodNameOwnerDesc(method.name, classNode.name, method.desc)
+        else
+            correspondingSuspendFunctionForDoResume(method)
+        method.instructions.insert(generateHandleDoResumeCall(ctxVarIndex, function))
+        insertPrintln("doResume call for class ${classNode.name}", method.instructions)
     }
 }
 
