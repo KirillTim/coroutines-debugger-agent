@@ -9,32 +9,6 @@ import kotlin.coroutines.experimental.Continuation
  * @author Kirill Timofeev
  */
 
-sealed class UserDefinedSuspendFunction(open val method: MethodNode, open val owner: ClassNode,
-                                        open val lineNumber: Int) {
-    fun prettyPrint(arguments: List<Any>? = null): String {
-        val type = Type.getType(method.desc)
-        val argumentsStr = arguments?.joinToString() ?: type.argumentTypes.joinToString(transform = { it.className.split('.').last() })
-        val name = when (this) {
-            is AnonymousSuspendFunction -> "anonymous"
-            is NamedSuspendFunction -> "${this.owner.name.replace('/', '.')}.${this.method.name}"
-        }
-        val returnType = type.returnType.className.split('.').last()
-        return "$name($argumentsStr): $returnType, defined at ${owner.sourceFile}:$lineNumber"
-    }
-}
-
-data class AnonymousSuspendFunction(override val method: MethodNode, override val owner: ClassNode,
-                                    override val lineNumber: Int)
-    : UserDefinedSuspendFunction(method, owner, lineNumber) {
-    override fun toString() = "anonymous in ${owner.name} : ${method.desc}, defined at ${owner.sourceFile}:$lineNumber"
-}
-
-data class NamedSuspendFunction(override val method: MethodNode, override val owner: ClassNode,
-                                override val lineNumber: Int)
-    : UserDefinedSuspendFunction(method, owner, lineNumber) {
-    override fun toString() = "${owner.name}.${method.name} : ${method.desc}, defined at ${owner.sourceFile}:$lineNumber"
-}
-
 data class MethodNodeClassNode(val method: MethodNode, val classNode: ClassNode)
 data class MethodNameOwnerDesc(val name: String, val owner: String, val desc: String)
 

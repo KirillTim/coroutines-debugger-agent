@@ -56,7 +56,7 @@ private fun generateAfterSuspendCall(suspendCall: MethodInsnNode, ctxVarIndex: I
     list.add(LdcInsnNode(suspendCall.desc)) //FIXME can find function by this three parameters
     list.add(LdcInsnNode(suspendCall.owner))
     list.add(LdcInsnNode(calledFrom))
-    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutineStacks", "afterSuspendCall",
+    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutinesManager", "afterSuspendCall",
             "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false))
     return list
 }
@@ -68,7 +68,7 @@ private fun generateHandleDoResumeCall(ctxVarIndex: Int, forFunction: MethodName
     list.add(LdcInsnNode(forFunction.name))
     list.add(LdcInsnNode(forFunction.owner))
     list.add(LdcInsnNode(forFunction.desc))
-    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutineStacks", "handleDoResume",
+    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutinesManager", "handleDoResume",
             "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false))
     return list
 }
@@ -127,13 +127,6 @@ class TestTransformer : ClassFileTransformer {
                 try {
                     val prevSize = doResumeToSuspendFunction.size
                     updateDoResumeToSuspendFunctionMap(method, classNode)
-                    if (doResumeToSuspendFunction.size != prevSize) {
-                        /*println("\ndoResume to suspend functions:")
-                        for ((doResume, suspendFunc) in doResumeToSuspendFunction) {
-                            println("${doResume.classNode.name}${doResume.method.name} -> $suspendFunc")
-                        }
-                        println()*/
-                    }
                     transformMethod(method, classNode)
                 } catch (e: Exception) {
                     println("exception : $e")

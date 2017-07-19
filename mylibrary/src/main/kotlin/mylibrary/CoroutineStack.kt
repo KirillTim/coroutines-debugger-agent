@@ -7,60 +7,76 @@ import kotlin.coroutines.experimental.CoroutineContext
  * @author Kirill Timofeev
  */
 
-sealed class CoroutineStackFrame(open val continuation: Continuation<*>) {
-    fun prettyPrint() = "continuation hash: ${continuation.hashCode()}, " + when (this) {
-        is UserDefined -> this.function.prettyPrint(arguments)
-        is LibraryFunction -> this.name
-    }
+private data class CoroutineStackFrame(val continuation: Continuation<*>, val function: SuspendFunction) {
+    fun prettyPrint() = "continuation hash: ${continuation.hashCode()}, ${function.prettyPrint()}"
 }
 
-data class UserDefined(override val continuation: Continuation<*>, val function: UserDefinedSuspendFunction,
-                       val arguments: List<Any>? = null) : CoroutineStackFrame(continuation)
+interface CoroutineStack {
+    val context: CoroutineContext
+    fun getSuspendedStack(): List<SuspendFunction>
+    fun handleSuspendFunctionReturn(continuation: Continuation<*>, function: SuspendFunction)
+    fun handleDoResume(continuation: Continuation<*>, function: UserDefinedSuspendFunction)
+}
 
-data class LibraryFunction(override val continuation: Continuation<*>, val name: String)
-    : CoroutineStackFrame(continuation)
+open class CoroutineStackImpl(override val context: CoroutineContext, val onCoroutineSuspend: CoroutineStackImpl.() -> Unit) : CoroutineStack {
 
-class CoroutineStack(val context: CoroutineContext) {
     private var stack = mutableListOf<CoroutineStackFrame>()
     private val temporaryStack = mutableListOf<CoroutineStackFrame>()
-    private var entryPoint: UserDefinedSuspendFunction? = null
-    private var topContinuation: Continuation<*>? = null
+    private var entryPoint: CoroutineStackFrame? = null
+    private var topCurrentContinuation: Continuation<*>? = null
 
-    fun handleSuspended(continuation: Continuation<*>, function: UserDefinedSuspendFunction)
-            = push(UserDefined(continuation, function))
+    override fun getSuspendedStack(): List<SuspendFunction> = stack.map { it.function }
 
-    fun handleSuspended(continuation: Continuation<*>, libraryFunction: String)
-            = push(LibraryFunction(continuation, libraryFunction))
-
-    private fun push(stackFrame: CoroutineStackFrame) {
-        if (topContinuation != null) {
-            if (topContinuation === stackFrame.continuation && stackFrame is UserDefined) {
-                System.err.println("add reversed temp to stack")
-                stack.add(0, stackFrame)
-                stack.addAll(0, temporaryStack)
-                temporaryStack.clear()
-                topContinuation = null
-            } else {
-                System.err.println("add ${stackFrame.prettyPrint()} to temp")
-                temporaryStack.add(stackFrame)
+    override fun handleSuspendFunctionReturn(continuation: Continuation<*>, function: SuspendFunction) {
+        val frame = CoroutineStackFrame(continuation, function)
+        temporaryStack.add(frame)
+        if (topCurrentContinuation != null) { //already have something on stack
+            if (topCurrentContinuation === continuation && function is UserDefinedSuspendFunction) {
+                applyStack()
             }
-        } else {
-            stack.add(stackFrame)
+        } else if (stack.isEmpty()) {
+            if (entryPoint?.continuation === frame.continuation) {
+                temporaryStack.add(entryPoint!!)
+                applyStack()
+            }
         }
     }
 
-    fun handleDoResume(continuation: Continuation<*>, function: UserDefinedSuspendFunction) {
+    // TODO: can't handle tail recursion for suspend functions.
+    // map from continuation to first suspend function call needed to restore different calls with same continuation
+    private fun applyStack() {
+        System.err.println("stack applied")
+        System.err.println("topCurrentContinuation hash: ${topCurrentContinuation?.hashCode()}")
+        System.err.println("entry point: hash: ${entryPoint?.continuation?.hashCode()}, func: ${entryPoint?.function}")
+        try {
+            System.err.println("temp: ${temporaryStack.joinToString("\n", transform = { it.prettyPrint() })}")
+        } catch (e: Exception) {
+            System.err.println("can't  print temporaryStack")
+        }
+        try {
+            System.err.println("stack: ${stack.joinToString("\n", transform = { it.prettyPrint() })}")
+        } catch (e: Exception) {
+            System.err.println("can't  print stack")
+        }
+        stack.addAll(0, temporaryStack)
+        temporaryStack.clear()
+        topCurrentContinuation = null
+        onCoroutineSuspend()
+    }
+
+    override fun handleDoResume(continuation: Continuation<*>, function: UserDefinedSuspendFunction) {
         if (entryPoint == null) {
-            entryPoint = function
+            entryPoint = CoroutineStackFrame(continuation, function)
+            System.err.println("entry point: ${entryPoint?.prettyPrint()}")
         }
         val currentTopFrame = stack.indexOfFirst { it.continuation === continuation } + 1 //FIXME
         if (currentTopFrame > 0) {
-            topContinuation = continuation
+            topCurrentContinuation = continuation
             stack = stack.drop(currentTopFrame).toMutableList()
         }
     }
 
-    fun prettyPrint() = "$context:\n" +
+    fun prettyPrint() = "$context:\n" + //FIXME
             if (stack.isEmpty()) "<empty>"
             else stack.first().prettyPrint() + " <- suspended here\n" +
                     stack.drop(1).joinToString("\n") { it.prettyPrint() } +
