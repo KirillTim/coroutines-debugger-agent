@@ -17,6 +17,7 @@ class Agent {
     companion object {
         @JvmStatic
         fun premain(agentArgs: String?, inst: Instrumentation) {
+            SocketWriter.start(8889, stacks)
             inst.addTransformer(AddCoroutinesInfoTransformer())
         }
     }

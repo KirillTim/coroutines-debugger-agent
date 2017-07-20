@@ -27,6 +27,8 @@ repositories {
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
+    compile "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.16"
+    compile "org.jetbrains.kotlinx:kotlinx-coroutines-nio:0.16"
     compile "org.ow2.asm:asm-all:5.2"
 }
 
@@ -35,4 +37,9 @@ compileKotlin {
 }
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
+}
+kotlin {
+    experimental {
+        coroutines "enable"
+    }
 }
