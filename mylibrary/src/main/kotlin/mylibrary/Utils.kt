@@ -103,19 +103,6 @@ private fun isSuspend(name: String, desc: String): Boolean { //TODO: what about 
             && type.returnType == Type.getType(Any::class.java)
 }
 
-fun insertPrintln(text: String, instructions: InsnList, insertAfter: AbstractInsnNode? = null): InsnList {
-    val list = InsnList()
-    list.add(FieldInsnNode(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;"))
-    list.add(LdcInsnNode(text))
-    list.add(MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false))
-    if (insertAfter != null) {
-        instructions.insert(insertAfter, list)
-    } else {
-        instructions.insert(list)
-    }
-    return instructions
-}
-
 fun prettyPrint(owner: String, name: String, desc: String): String {
     val type = Type.getType(desc)
     val arguments = type.argumentTypes.joinToString(transform = { it.className.split('.').last() })

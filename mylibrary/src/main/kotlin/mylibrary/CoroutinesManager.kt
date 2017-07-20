@@ -13,37 +13,31 @@ import kotlin.coroutines.experimental.jvm.internal.CoroutineImpl
 
 val stacks = mutableMapOf<CoroutineContext, CoroutineStackImpl>()
 
-private fun getCoroutineContext(coroutineOrContinuation: Any) = when (coroutineOrContinuation) {
-    is CoroutineImpl -> coroutineOrContinuation.context
-    is Continuation<*> -> coroutineOrContinuation.context
-    else -> throw IllegalArgumentException("expected type CoroutineImpl or Continuation got ${Any::class.java} instead")
-}
-
-fun afterSuspendCall(result: Any, coroutineOrContinuation: Any, name: String, desc: String, owner: String, calledFrom: String) { //FIXME
+fun afterSuspendCall(result: Any, continuation: Continuation<*>, name: String, desc: String, owner: String, calledFrom: String) { //FIXME
     val suspended = result == COROUTINE_SUSPENDED
     val fullFunctionName = prettyPrint(owner, name, desc)
     System.err.println("suspend call of $fullFunctionName, called from $calledFrom with " +
-            "${coroutineOrContinuation.hashCode()} : ${if (suspended) "suspended" else "result = $result"}")
+            "${continuation.hashCode()} : ${if (suspended) "suspended" else "result = $result"}")
     try {
         if (suspended) {
             val func = doResumeToSuspendFunction.values.find {
                 it.method.name == name && it.method.desc == desc
                         && it.owner.name == owner
             } ?: LibrarySuspendFunction(name, owner, desc)
-            val context = getCoroutineContext(coroutineOrContinuation)
+            val context = continuation.context
             val stack = stacks.getOrPut(context, { CoroutineStackImpl(context, { System.err.println("logger: \n"+this.prettyPrint()) }) })
-            stack.handleSuspendFunctionReturn(coroutineOrContinuation as Continuation<*>, func)
+            stack.handleSuspendFunctionReturn(continuation, func)
         }
     } catch (e: Exception) {
-        System.err.println("afterSuspendCall($result, ${ObjectPrinter.objToString(coroutineOrContinuation)}, $fullFunctionName, $calledFrom):\n ${e.printStackTrace()}")
+        System.err.println("afterSuspendCall($result, ${ObjectPrinter.objToString(continuation)}, $fullFunctionName, $calledFrom):\n ${e.printStackTrace()}")
     }
 
 }
 
-fun handleDoResume(coroutineOrContinuation: Any, name: String, owner: String, desc: String) { //FIXME
+fun handleDoResume(continuation: Continuation<*>, name: String, owner: String, desc: String) { //FIXME
     val func = doResumeToSuspendFunction.values.find { it.method.name == name && it.method.desc == desc && it.owner.name == owner }!!
-    System.err.println("called doResume for ${func.prettyPrint()} : cont: ${coroutineOrContinuation.hashCode()}")
-    val context = getCoroutineContext(coroutineOrContinuation)
+    System.err.println("called doResume for ${func.prettyPrint()} : cont: ${continuation.hashCode()}")
+    val context = continuation.context
     val stack = stacks.getOrPut(context, { CoroutineStackImpl(context, { System.err.println("logger: \n"+this.prettyPrint())  }) })
-    stack.handleDoResume(coroutineOrContinuation as Continuation<*>, func)
+    stack.handleDoResume(continuation, func)
 }

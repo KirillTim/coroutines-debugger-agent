@@ -3,7 +3,6 @@ package agent
 import mylibrary.*
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
-import org.objectweb.asm.Opcodes
 import org.objectweb.asm.Type
 import org.objectweb.asm.tree.*
 import java.io.PrintWriter
@@ -48,31 +47,6 @@ private fun getContinuationVarIndex(method: MethodNode): WithContextVarIndex {
     val continuationIndex = continuationArgumentIndex(method)
             ?: throw IllegalArgumentException("Can't find Continuation in ${method.desc}")
     return ContinuationVar(argumentVarIndex(Type.getArgumentTypes(method.desc), continuationIndex))
-}
-
-private fun generateAfterSuspendCall(suspendCall: MethodInsnNode, ctxVarIndex: Int, calledFrom: String): InsnList {
-    val list = InsnList()
-    list.add(InsnNode(Opcodes.DUP))
-    list.add(IntInsnNode(Opcodes.ALOAD, ctxVarIndex))
-    list.add(LdcInsnNode(suspendCall.name))
-    list.add(LdcInsnNode(suspendCall.desc)) //FIXME can find function by this three parameters
-    list.add(LdcInsnNode(suspendCall.owner))
-    list.add(LdcInsnNode(calledFrom))
-    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutinesManager", "afterSuspendCall",
-            "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false))
-    return list
-}
-
-//each suspend function can be determined by doResume owner class
-private fun generateHandleDoResumeCall(ctxVarIndex: Int, forFunction: MethodNameOwnerDesc): InsnList {
-    val list = InsnList()
-    list.add(IntInsnNode(Opcodes.ALOAD, ctxVarIndex))
-    list.add(LdcInsnNode(forFunction.name))
-    list.add(LdcInsnNode(forFunction.owner))
-    list.add(LdcInsnNode(forFunction.desc))
-    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, "mylibrary/CoroutinesManager", "handleDoResume",
-            "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false))
-    return list
 }
 
 private data class ExtendsImplements(val extends: String?, val implements: List<String>)
