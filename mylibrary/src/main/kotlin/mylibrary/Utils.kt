@@ -87,7 +87,7 @@ fun MethodNode.isSuspend() = isSuspend(name, desc)
 
 fun MethodInsnNode.isSuspend() = isSuspend(name, desc)
 
-fun continuationVarIndex(method: MethodNode) =
+fun continuationArgumentIndex(method: MethodNode) =
         if (!method.isSuspend()) null
         else Type.getType(method.desc).argumentTypes.size - continuationOffsetFromEndInDesc(method.name)
 
