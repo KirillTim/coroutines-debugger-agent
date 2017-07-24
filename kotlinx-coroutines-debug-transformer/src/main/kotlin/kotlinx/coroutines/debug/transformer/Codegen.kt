@@ -2,6 +2,8 @@ package kotlinx.coroutines.debug.transformer
 
 import kotlinx.coroutines.debug.manager.MethodId
 import org.objectweb.asm.Opcodes
+import org.objectweb.asm.Type
+import org.objectweb.asm.commons.InstructionAdapter
 import org.objectweb.asm.tree.*
 
 /**
@@ -16,42 +18,44 @@ private val MANAGER_CLASS_NAME = "kotlinx/coroutines/debug/manager/Manager"
 private val AFTER_SUSPEND_CALL = "afterSuspendCall"
 private val HANDLE_DO_RESUME = "handleDoResume"
 
-fun generateAfterSuspendCall(suspendCall: MethodInsnNode, continuationVarIndex: Int, calledFromFunction: String,
-                             file: String, line: Int): InsnList {
-    val list = InsnList()
-    list.add(InsnNode(Opcodes.DUP))
-    list.add(IntInsnNode(Opcodes.ALOAD, continuationVarIndex))
-    list.add(LdcInsnNode(suspendCall.name))
-    list.add(LdcInsnNode(suspendCall.desc)) //FIXME can find functionCall by this three parameters
-    list.add(LdcInsnNode(suspendCall.owner))
-    list.add(LdcInsnNode(calledFromFunction))
-    list.add(LdcInsnNode("$file:$line")) //FIXME?
-    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, MANAGER_CLASS_NAME, AFTER_SUSPEND_CALL,
-            "($OBJECT$CONTINUATION$STRING$STRING$STRING$STRING$STRING)V", false))
-    return list
-}
+private inline fun code(block: InstructionAdapter.() -> Unit) =
+    MethodNode().apply { block(InstructionAdapter(this)) }.instructions
+
+fun generateAfterSuspendCall(
+    suspendCall: MethodInsnNode, continuationVarIndex: Int, calledFromFunction: String,
+    file: String, line: Int
+) =
+    code {
+        dup()
+        load(continuationVarIndex, Type.getType(CONTINUATION))
+        aconst(suspendCall.name)
+        aconst(suspendCall.desc)
+        aconst(suspendCall.owner)
+        aconst(calledFromFunction)// todo: remove it
+        aconst("$file:$line") // todo: renumber this tuple
+        visitMethodInsn(Opcodes.INVOKESTATIC, MANAGER_CLASS_NAME, AFTER_SUSPEND_CALL,
+            "($OBJECT$CONTINUATION$STRING$STRING$STRING$STRING$STRING)V", false)
+    }
 
 //each suspend functionCall can be determined by doResume ownerNode class
-fun generateHandleDoResumeCall(continuationVarIndex: Int, forFunction: MethodId): InsnList {
-    val list = InsnList()
-    list.add(IntInsnNode(Opcodes.ALOAD, continuationVarIndex))
-    list.add(LdcInsnNode(forFunction.name))
-    list.add(LdcInsnNode(forFunction.owner))
-    list.add(LdcInsnNode(forFunction.desc))
-    list.add(MethodInsnNode(Opcodes.INVOKESTATIC, MANAGER_CLASS_NAME, HANDLE_DO_RESUME,
-            "($CONTINUATION$STRING$STRING$STRING)V", false))
-    return list
-}
-
-fun insertPrintln(text: String, instructions: InsnList, insertAfter: AbstractInsnNode? = null): InsnList {
-    val list = InsnList()
-    list.add(FieldInsnNode(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;"))
-    list.add(LdcInsnNode(text))
-    list.add(MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false))
-    if (insertAfter != null) {
-        instructions.insert(insertAfter, list)
-    } else {
-        instructions.insert(list)
+fun generateHandleDoResumeCall(continuationVarIndex: Int, forFunction: MethodId) =
+    InsnList().apply { // todo: use code
+        add(IntInsnNode(Opcodes.ALOAD, continuationVarIndex))
+        add(LdcInsnNode(forFunction.name))
+        add(LdcInsnNode(forFunction.owner))
+        add(LdcInsnNode(forFunction.desc))
+        add(MethodInsnNode(Opcodes.INVOKESTATIC, MANAGER_CLASS_NAME, HANDLE_DO_RESUME,
+                "($CONTINUATION$STRING$STRING$STRING)V", false))
     }
-    return instructions
-}
+    
+fun insertPrintln(text: String, instructions: InsnList, insertAfter: AbstractInsnNode? = null) =
+    InsnList().apply { // todo: use code
+        add(FieldInsnNode(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;"))
+        add(LdcInsnNode(text))
+        add(MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false))
+        if (insertAfter != null) {
+            instructions.insert(insertAfter, this)
+        } else {
+            instructions.insert(this)
+        }
+    }
