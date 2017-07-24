@@ -1,49 +1,62 @@
-group 'org.jetbrains.kotlin'
-version '1.0-SNAPSHOT'
-
-buildscript {
-    ext.kotlin_version = '1.1.4-dev-1075'
+allprojects {
+    group "org.jetbrains.kotlin"
+    version "1.0-SNAPSHOT"
 
     repositories {
-        maven { url 'http://dl.bintray.com/kotlin/kotlin-dev' }
-        mavenCentral()
+        maven { url "http://dl.bintray.com/kotlin/kotlin-dev" }
+        jcenter()
+    }
+}
+
+buildscript { //FIXME: use new plugin {...} syntax, change kotlin version (and repo)
+    ext.kotlin_version = "1.1.4-dev-1319"
+    repositories {
+        maven { url "http://dl.bintray.com/kotlin/kotlin-dev" }
         jcenter()
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "com.github.jengelman.gradle.plugins:shadow:2.0.1"
     }
 }
 
-apply plugin: 'java'
-apply plugin: 'kotlin'
+apply plugin: "com.github.johnrengelman.shadow"
+apply plugin: "java"
 
-repositories {
-    maven { url 'http://dl.bintray.com/kotlin/kotlin-dev' }
-    jcenter()
+subprojects {
+    apply plugin: "kotlin"
+
+    dependencies {
+        compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
+    }
+
+    sourceCompatibility = 1.8
+    compileKotlin.kotlinOptions.jvmTarget = "1.8"
+    compileTestKotlin.kotlinOptions.jvmTarget = "1.8"
 }
 
 dependencies {
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
-    compile "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.16"
-    compile "org.ow2.asm:asm-all:5.2"
-
-    compile project(':mylibrary')
+    compile project(":kotlinx-coroutines-debug-agent")
 }
 
-kotlin {
-    experimental {
-        coroutines "enable"
+shadowJar {
+    baseName = "coroutines-debug-agent"
+    classifier = null
+    version = null
+
+    configurations = [project.configurations.compile]
+
+    dependencies {
+        include dependency("org.ow2.asm:asm-all:.*")
+        include dependency(":kotlinx-coroutines-debug.*") //such a regexp, very wow!
+        exclude dependency("org.jetbrains.kotlin:kotlin-stdlib-jre8")
     }
+
+    relocate "org.objectweb.asm", "kotlinx.coroutines.debug.org.objectweb.asm"
 }
 
 jar {
     manifest {
-        attributes "Premain-Class": "agent.Agent"
+        attributes "Premain-Class": "kotlinx.coroutines.debug.agent.Agent"
     }
-}
-
-task runApp(type: JavaExec, dependsOn: build) {
-    classpath = sourceSets.test.runtimeClasspath
-    main = "example.CoroutineExampleKt"
-    jvmArgs += ["-Dkotlinx.coroutines.debug", "-javaagent:${jar.getArchivePath()}"]
 }

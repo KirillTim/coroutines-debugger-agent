@@ -1,0 +1,17 @@
+dependencies {
+    testCompile 'junit:junit:4.12'
+    testCompile project(":kotlinx-coroutines-debug-agent")
+    testCompile "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.16"
+}
+
+task runTest(type: JavaExec, dependsOn: build) { //FIXME
+    classpath = sourceSets.test.runtimeClasspath
+    main = "example.MainKt"
+    jvmArgs += ["-Dkotlinx.coroutines.debug", "-javaagent:../build/libs/coroutines-debug-agent.jar"]
+}
+
+kotlin {
+    experimental {
+        coroutines "enable"
+    }
+}

@@ -1,0 +1,4 @@
+dependencies {
+    compile 'org.ow2.asm:asm-all:5.2'
+    compile project(':kotlinx-coroutines-debug-manager')
+}
