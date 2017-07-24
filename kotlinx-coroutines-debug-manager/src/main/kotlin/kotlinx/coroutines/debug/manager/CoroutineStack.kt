@@ -76,7 +76,7 @@ class CoroutineStackImpl(override val context: CoroutineContext,
 
     override fun handleDoResume(continuation: Continuation<*>, function: SuspendFunction) {
         if (entryPoint == null) {
-            entryPoint = CoroutineStackFrame(continuation, FunctionCall(function, function.name, -1)) //FIXME
+            entryPoint = CoroutineStackFrame(continuation, FunctionCall(function.method, "unknown", -1)) //FIXME
             System.err.println("entry point: ${entryPoint?.prettyPrint()}")
         }
         var currentTopFrame = stack.indexOfFirst { it.continuation === continuation } + 1 //FIXME

@@ -23,7 +23,7 @@ private data class CoroutineImplVar(override val index: Int) : WithContextVarInd
 private data class ContinuationVar(override val index: Int) : WithContextVarIndex(index)
 
 private fun isCoroutineImplOrSubType(variable: LocalVariableNode): Boolean { //fiXME should we really check the type?
-    if (variable.desc == COROUTINE_IMPL_TYPE.descriptor) {
+    if (Type.getType(variable.desc) == COROUTINE_IMPL_TYPE) {
         return true
     }
     val extends = typesInfo[Type.getType(variable.desc).internalName]?.extends ?: return false
@@ -36,6 +36,9 @@ private fun argumentVarIndex(argumentTypes: Array<Type>, argumentIndex: Int)
 private fun getContinuationVarIndex(method: MethodNode): WithContextVarIndex {
     //FIXME use getfield instruction instead
     val thisVar = method.localVariables?.map { it as LocalVariableNode }?.firstOrNull { it.name == "this" }
+    if (method.name.contains("doResume")) {
+        println("this: ${thisVar?.name}, ${thisVar?.desc}")
+    }
     if (thisVar != null && isCoroutineImplOrSubType(thisVar)) {
         return CoroutineImplVar(thisVar.index)
     }
@@ -72,11 +75,12 @@ private fun transformMethod(method: MethodNode, classNode: ClassNode): DoResumeF
         }
         if (isDoResume) {
             val function = if (isStateMachine)
-                NamedSuspendFunction(MethodIdSimple(method.name, classNode.name, method.desc))
+                AnonymousSuspendFunction(MethodId(method.name, classNode.name, method.desc))
             else
                 correspondingSuspendFunctionForDoResume(method)
-            method.instructions.insert(generateHandleDoResumeCall(continuation.index, function))
-            return DoResumeForSuspend(buildMethodId(method, classNode), function)
+            method.instructions.insert(generateHandleDoResumeCall(continuation.index, function.method))
+            return DoResumeForSuspend(buildMethodId(method, classNode)
+                    .copy(info = MethodInfo(isStateMachine, isSuspend, isDoResume, isStateMachine)), function)
         }
     }
     return null
@@ -89,13 +93,27 @@ class CoroutinesDebugTransformer : ClassFileTransformer {
         val reader = ClassReader(classfileBuffer)
         val classNode = ClassNode()
         reader.accept(classNode, 0)
+
+        typesInfo[classNode.name] = ExtendsImplements(classNode.superName, classNode.interfaces.map { it as String })
         for (method in classNode.methods.map { it as MethodNode }) {
             try {
                 val doResumeForSuspend = transformMethod(method, classNode)
-                if (doResumeForSuspend != null)
+                val oldSz = doResumeToSuspendFunction.size
+                if (doResumeForSuspend != null) {
                     updateDoResumeToSuspendFunctionMap(doResumeForSuspend)
-                else
-                    updateDoResumeToSuspendFunctionMap(buildMethodId(method, classNode))
+                } else {
+                    val m = buildMethodId(method, classNode)
+                    val info = m.info
+                    if (info != null && (info.isSuspend || info.isDoResume || info.isStateMachine)) {
+                        updateDoResumeToSuspendFunctionMap(m)
+                    }
+                }
+                if (doResumeToSuspendFunction.size != oldSz) {
+                    println("doResumeToSuspendFunction:")
+                    for ((k, v) in doResumeToSuspendFunction) {
+                        println("$k : $v")
+                    }
+                }
             } catch (e: Exception) {
                 val trace = StringWriter()
                 e.printStackTrace(PrintWriter(trace));

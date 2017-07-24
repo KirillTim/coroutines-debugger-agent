@@ -40,7 +40,7 @@ internal fun correspondingSuspendFunctionForDoResume(method: MethodNode): Suspen
     val suspendFunctionCall = aReturn.previous
     if (suspendFunctionCall is MethodInsnNode && suspendFunctionCall.opcode == Opcodes.INVOKESTATIC
             && aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) {
-        return NamedSuspendFunction(MethodIdSimple(suspendFunctionCall.name, suspendFunctionCall.owner, suspendFunctionCall.desc))
+        return NamedSuspendFunction(MethodId(suspendFunctionCall.name, suspendFunctionCall.owner, suspendFunctionCall.desc))
     }
     throw IllegalArgumentException("Unexpected end instructions in ${method.name}")
 }
@@ -81,10 +81,10 @@ private fun prettyPrint(method: MethodNode, classNode: ClassNode, argumentValues
     return "${classNode.name.replace('/', '.')}.${method.name}($arguments): $returnType"
 }
 
-internal fun buildMethodId(method: MethodNode, classNode: ClassNode): MethodIdWithInfo {
+internal fun buildMethodId(method: MethodNode, classNode: ClassNode): MethodId {
     val isSMForAnonymous = isStateMachineForAnonymousSuspendFunction(method) //FIXME how to determine is anonymous or not?
     val info = MethodInfo(isSMForAnonymous, method.isSuspend(), method.isDoResume(), isSMForAnonymous)
-    return MethodIdWithInfo(method.name, classNode.name, method.desc, info, prettyPrint(method, classNode))
+    return MethodId(method.name, classNode.name, method.desc, info, prettyPrint(method, classNode))
 }
 
 internal fun firstInstructionLineNumber(method: MethodNode) = //FIXME
