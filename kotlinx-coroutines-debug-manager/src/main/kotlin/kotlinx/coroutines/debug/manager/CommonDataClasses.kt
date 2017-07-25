@@ -4,11 +4,19 @@ package kotlinx.coroutines.debug.manager
  * @author Kirill Timofeev
  */
 
-data class MethodInfo(val isAnonymous: Boolean = false, val isSuspend: Boolean = false,
-                      val isDoResume: Boolean = false, val isStateMachine: Boolean = false)
+data class MethodInfo(
+    val isAnonymous: Boolean = false,
+    val isSuspend: Boolean = false,
+    val isDoResume: Boolean = false,
+    val isStateMachine: Boolean = false)
 
-data class MethodId(val name: String, val owner: String, val desc: String, val info: MethodInfo? = null,
-                    val pretty: String = "") {
+data class MethodId(
+    val name: String,
+    val owner: String,
+    val desc: String,
+    val info: MethodInfo? = null,
+    val pretty: String = ""
+) {
     override fun toString() = (if (pretty.isNotEmpty()) pretty else "$owner $name $desc") + "${info ?: ""}"
 }
 

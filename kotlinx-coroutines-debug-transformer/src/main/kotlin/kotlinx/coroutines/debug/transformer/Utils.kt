@@ -14,43 +14,36 @@ internal val THROWABLE_TYPE = Type.getType(Throwable::class.java)
 internal val CONTINUATION_TYPE = Type.getType("Lkotlin/coroutines/experimental/Continuation;")
 internal val COROUTINE_IMPL_TYPE = Type.getType("Lkotlin/coroutines/experimental/jvm/internal/CoroutineImpl;")
 
-private fun isGetCOROUTINE_SUSPENDED(inst: AbstractInsnNode) =
-        inst is MethodInsnNode && inst.name == "getCOROUTINE_SUSPENDED"
-                && inst.owner == "kotlin/coroutines/experimental/intrinsics/IntrinsicsKt"
-                && inst.desc == "()Ljava/lang/Object;"
+private fun AbstractInsnNode?.isGetCOROUTINE_SUSPENDED() =
+        this is MethodInsnNode && name == "getCOROUTINE_SUSPENDED"
+                && owner == "kotlin/coroutines/experimental/intrinsics/IntrinsicsKt"
+                && desc == "()Ljava/lang/Object;"
 
+private fun AbstractInsnNode?.isLabel() =
+        this is FieldInsnNode && name == "label"
 
-internal fun isStateMachineForAnonymousSuspendFunction(method: MethodNode): Boolean { //FIXME
-    if (!method.isDoResume()) {
-        return false
-    }
-    val getSuspendedConst = method.instructions.get(0)
-    val l0 = method.instructions.get(1)
-    val getLabel = method.instructions.get(5)
-    val tableSwitch = method.instructions.get(6)
-    return isGetCOROUTINE_SUSPENDED(getSuspendedConst) && l0 is LabelNode
-            && getLabel is FieldInsnNode && getLabel.name == "label" && tableSwitch is TableSwitchInsnNode
+internal fun MethodNode.isStateMachineForAnonymousSuspendFunction(): Boolean =
+    isDoResume() &&
+        instructions[0].isGetCOROUTINE_SUSPENDED() &&
+        instructions[1] is LabelNode &&
+        instructions[5].isLabel() &&
+        instructions[6] is TableSwitchInsnNode
+
+internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFunction { //FIXME
+    require(isDoResume()) { "${name} should be doResume functionCall" }
+    val aReturn = instructions.last.previous // todo: too fragile
+    require(aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) { "Must be areturn" }
+    val suspendFunctionCall = aReturn.previous as MethodInsnNode
+    require (suspendFunctionCall.opcode == Opcodes.INVOKESTATIC)
+    return NamedSuspendFunction(MethodId(suspendFunctionCall.name, suspendFunctionCall.owner, suspendFunctionCall.desc))
 }
 
-internal fun correspondingSuspendFunctionForDoResume(method: MethodNode): SuspendFunction { //FIXME
-    if (!method.isDoResume()) {
-        throw IllegalArgumentException("${method.name} should be doResume functionCall")
-    }
-    val aReturn = method.instructions.last.previous
-    val suspendFunctionCall = aReturn.previous
-    if (suspendFunctionCall is MethodInsnNode && suspendFunctionCall.opcode == Opcodes.INVOKESTATIC
-            && aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) {
-        return NamedSuspendFunction(MethodId(suspendFunctionCall.name, suspendFunctionCall.owner, suspendFunctionCall.desc))
-    }
-    throw IllegalArgumentException("Unexpected end instructions in ${method.name}")
-}
+private fun Type.isResumeMethodDesc() =
+    (returnType == OBJECT_TYPE && argumentTypes.size == 2 // FIXME
+        && argumentTypes[0] == OBJECT_TYPE && argumentTypes[1] == THROWABLE_TYPE)
 
-fun MethodNode.isDoResume(): Boolean {
-    if (name != "doResume") return false
-    val type = Type.getType(desc)
-    return type.returnType == OBJECT_TYPE && type.argumentTypes.size == 2 // FIXME
-            && type.argumentTypes[0] == OBJECT_TYPE && type.argumentTypes[1] == THROWABLE_TYPE
-}
+fun MethodNode.isDoResume(): Boolean = name == "doResume" && Type.getType(desc).isResumeMethodDesc()
+
 
 fun MethodNode.isSuspend() = isSuspend(name, desc)
 
@@ -60,29 +53,25 @@ internal fun continuationArgumentIndex(method: MethodNode) =
         if (!method.isSuspend()) null
         else Type.getType(method.desc).argumentTypes.size - continuationOffsetFromEndInDesc(method.name)
 
-
 private fun continuationOffsetFromEndInDesc(name: String) = if (name.endsWith("\$default")) 3 else 1
 
 private fun isSuspend(name: String, desc: String): Boolean {
-    val type = Type.getType(desc)
     val offset = continuationOffsetFromEndInDesc(name)
-    return type.argumentTypes.isNotEmpty()
-            && (type.argumentTypes.lastIndexOf(CONTINUATION_TYPE) == type.argumentTypes.size - offset)
+    val type = Type.getType(desc)
+    return type.argumentTypes.getOrNull(type.argumentTypes.size - offset) == CONTINUATION_TYPE
             && type.returnType == Type.getType(Any::class.java)
 }
 
 private fun prettyPrint(method: MethodNode, classNode: ClassNode, argumentValues: List<Any>? = null): String {
-    fun argumentsString(argumentTypes: Array<Type>, argumentValues: List<Any>?) =
-            argumentValues?.joinToString() ?: argumentTypes.joinToString(transform = { it.className.split('.').last() })
-
     val type = Type.getType(method.desc)
-    val arguments = argumentsString(type.argumentTypes, argumentValues)
+    val arguments = argumentValues?.joinToString() ?:
+        type.argumentTypes.joinToString(transform = { it.className.split('.').last() })
     val returnType = type.returnType.className.split('.').last()
     return "${classNode.name.replace('/', '.')}.${method.name}($arguments): $returnType"
 }
 
 internal fun buildMethodId(method: MethodNode, classNode: ClassNode): MethodId {
-    val isSMForAnonymous = isStateMachineForAnonymousSuspendFunction(method) //FIXME how to determine is anonymous or not?
+    val isSMForAnonymous = method.isStateMachineForAnonymousSuspendFunction() //FIXME how to determine is anonymous or not?
     val info = MethodInfo(isSMForAnonymous, method.isSuspend(), method.isDoResume(), isSMForAnonymous)
     return MethodId(method.name, classNode.name, method.desc, info, prettyPrint(method, classNode))
 }
