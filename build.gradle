@@ -39,6 +39,12 @@ dependencies {
     compile project(":kotlinx-coroutines-debug-agent")
 }
 
+jar.enabled = false //prevent `build` task from empty jar creation
+
+tasks.build.doLast {
+    shadowJar.execute()
+}
+
 shadowJar {
     baseName = "coroutines-debug-agent"
     classifier = null
