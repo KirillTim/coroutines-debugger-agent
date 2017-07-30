@@ -11,69 +11,67 @@ import org.objectweb.asm.tree.*
 
 internal val OBJECT_TYPE = Type.getType(Any::class.java)
 internal val THROWABLE_TYPE = Type.getType(Throwable::class.java)
+internal val STRING_TYPE = Type.getType(String::class.java)
 internal val CONTINUATION_TYPE = Type.getType("Lkotlin/coroutines/experimental/Continuation;")
 internal val COROUTINE_IMPL_TYPE = Type.getType("Lkotlin/coroutines/experimental/jvm/internal/CoroutineImpl;")
 
 private fun AbstractInsnNode?.isGetCOROUTINE_SUSPENDED() =
         this is MethodInsnNode && name == "getCOROUTINE_SUSPENDED"
                 && owner == "kotlin/coroutines/experimental/intrinsics/IntrinsicsKt"
-                && desc == "()Ljava/lang/Object;"
+                && desc == "()${OBJECT_TYPE.descriptor}"
 
-private fun AbstractInsnNode?.isLabel() =
+private fun AbstractInsnNode?.isGetLabel() =
         this is FieldInsnNode && name == "label"
 
-internal fun MethodNode.isStateMachineForAnonymousSuspendFunction(): Boolean =
-    isDoResume() &&
-        instructions[0].isGetCOROUTINE_SUSPENDED() &&
-        instructions[1] is LabelNode &&
-        instructions[5].isLabel() &&
-        instructions[6] is TableSwitchInsnNode
+internal fun MethodNode.isStateMachineForAnonymousSuspendFunction() =
+        isDoResume() &&
+                instructions[0].isGetCOROUTINE_SUSPENDED() &&
+                instructions[1] is LabelNode &&
+                instructions[5].isGetLabel() &&
+                instructions[6] is TableSwitchInsnNode
 
-internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFunction { //FIXME
+internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFunction {
     require(isDoResume()) { "${name} should be doResume functionCall" }
     val aReturn = instructions.last.previous // todo: too fragile
-    require(aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) { "Must be areturn" }
+    require(aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) { "instruction before last must be areturn" }
     val suspendFunctionCall = aReturn.previous as MethodInsnNode
-    require (suspendFunctionCall.opcode == Opcodes.INVOKESTATIC)
+    require(suspendFunctionCall.opcode == Opcodes.INVOKESTATIC)
     return NamedSuspendFunction(MethodId(suspendFunctionCall.name, suspendFunctionCall.owner, suspendFunctionCall.desc))
 }
 
 private fun Type.isResumeMethodDesc() =
-    (returnType == OBJECT_TYPE && argumentTypes.size == 2 // FIXME
-        && argumentTypes[0] == OBJECT_TYPE && argumentTypes[1] == THROWABLE_TYPE)
+        returnType == OBJECT_TYPE && argumentTypes.contentEquals(arrayOf(OBJECT_TYPE, THROWABLE_TYPE))
 
-fun MethodNode.isDoResume(): Boolean = name == "doResume" && Type.getType(desc).isResumeMethodDesc()
+fun MethodNode.isDoResume() = name == "doResume"
+        && Type.getType(desc).isResumeMethodDesc() && (access and Opcodes.ACC_ABSTRACT == 0)
 
 
 fun MethodNode.isSuspend() = isSuspend(name, desc)
 
 fun MethodInsnNode.isSuspend() = isSuspend(name, desc)
 
-internal fun continuationArgumentIndex(method: MethodNode) =
-        if (!method.isSuspend()) null
-        else Type.getType(method.desc).argumentTypes.size - continuationOffsetFromEndInDesc(method.name)
-
-private fun continuationOffsetFromEndInDesc(name: String) = if (name.endsWith("\$default")) 3 else 1
+internal fun continuationOffsetFromEndInDesc(name: String) = if (name.endsWith("\$default")) 3 else 1
 
 private fun isSuspend(name: String, desc: String): Boolean {
     val offset = continuationOffsetFromEndInDesc(name)
-    val type = Type.getType(desc)
-    return type.argumentTypes.getOrNull(type.argumentTypes.size - offset) == CONTINUATION_TYPE
-            && type.returnType == Type.getType(Any::class.java)
+    val descType = Type.getType(desc)
+    return descType.argumentTypes.getOrNull(descType.argumentTypes.size - offset) == CONTINUATION_TYPE
+            && descType.returnType == Type.getType(Any::class.java)
 }
 
-private fun prettyPrint(method: MethodNode, classNode: ClassNode, argumentValues: List<Any>? = null): String {
-    val type = Type.getType(method.desc)
+private fun prettyPrint(method: MethodId, argumentValues: List<Any>? = null): String {
+    val descType = Type.getType(method.desc)
     val arguments = argumentValues?.joinToString() ?:
-        type.argumentTypes.joinToString(transform = { it.className.split('.').last() })
-    val returnType = type.returnType.className.split('.').last()
-    return "${classNode.name.replace('/', '.')}.${method.name}($arguments): $returnType"
+            descType.argumentTypes.joinToString(transform = { it.className.split('.').last() })
+    val returnType = descType.returnType.className.split('.').last()
+    return "${method.owner.replace('/', '.')}.${method.name}($arguments): $returnType"
 }
 
-internal fun buildMethodId(method: MethodNode, classNode: ClassNode): MethodId {
+internal fun buildMethodIdWithInfo(method: MethodNode, classNode: ClassNode): MethodIdWithInfo {
     val isSMForAnonymous = method.isStateMachineForAnonymousSuspendFunction() //FIXME how to determine is anonymous or not?
     val info = MethodInfo(isSMForAnonymous, method.isSuspend(), method.isDoResume(), isSMForAnonymous)
-    return MethodId(method.name, classNode.name, method.desc, info, prettyPrint(method, classNode))
+    val methodId = MethodId(method.name, classNode.name, method.desc)
+    return MethodIdWithInfo(methodId, info, prettyPrint(methodId))
 }
 
 internal fun firstInstructionLineNumber(method: MethodNode) = //FIXME
@@ -93,7 +91,7 @@ private fun methodCallNodeToLabelNode(instructions: InsnList): Map<MethodInsnNod
 }
 
 private fun labelNodeToLineNumber(instructions: InsnList)
-        = instructions.toArray().filterIsInstance<LineNumberNode>().map { it.start to it.line }.toMap()
+        = instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.start to it.line }.toMap()
 
 /*
 * It is possible not to have line number before method call (e.g: inside synthetic bridge)

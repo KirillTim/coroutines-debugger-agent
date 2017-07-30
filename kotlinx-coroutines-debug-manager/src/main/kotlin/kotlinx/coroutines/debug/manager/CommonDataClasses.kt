@@ -5,22 +5,20 @@ package kotlinx.coroutines.debug.manager
  */
 
 data class MethodInfo(
-    val isAnonymous: Boolean = false,
-    val isSuspend: Boolean = false,
-    val isDoResume: Boolean = false,
-    val isStateMachine: Boolean = false)
+        val isAnonymous: Boolean = false,
+        val isSuspend: Boolean = false,
+        val isDoResume: Boolean = false,
+        val isStateMachine: Boolean = false)
 
-data class MethodId(
-    val name: String,
-    val owner: String,
-    val desc: String,
-    val info: MethodInfo? = null,
-    val pretty: String = ""
-) {
-    override fun toString() = (if (pretty.isNotEmpty()) pretty else "$owner $name $desc") + "${info ?: ""}"
+data class MethodId(val name: String, val owner: String, val desc: String) {
+    override fun toString() = "$owner.$name $desc"
 }
 
-data class DoResumeForSuspend(val doResume: MethodId, val suspend: SuspendFunction)
+data class MethodIdWithInfo(val method: MethodId, val info: MethodInfo, private val pretty: String = "") {
+    override fun toString() = if (pretty.isNotEmpty()) pretty else "$method" + info
+}
+
+data class DoResumeForSuspend(val doResume: MethodIdWithInfo, val suspend: SuspendFunction)
 
 data class FunctionCall(val function: MethodId, val file: String, val line: Int, val fromFunction: String? = null) {
     override fun toString() = "$function at $file;$line"

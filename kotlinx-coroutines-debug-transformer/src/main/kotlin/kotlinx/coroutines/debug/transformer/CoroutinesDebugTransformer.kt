@@ -1,13 +1,17 @@
 package kotlinx.coroutines.debug.transformer
 
-import kotlinx.coroutines.debug.manager.*
+import kotlinx.coroutines.debug.manager.AnonymousSuspendFunction
+import kotlinx.coroutines.debug.manager.DoResumeForSuspend
+import kotlinx.coroutines.debug.manager.MethodId
+import kotlinx.coroutines.debug.manager.doResumeToSuspendFunctions
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Opcodes
 import org.objectweb.asm.Type
 import org.objectweb.asm.tree.ClassNode
-import org.objectweb.asm.tree.LocalVariableNode
 import org.objectweb.asm.tree.MethodInsnNode
 import org.objectweb.asm.tree.MethodNode
+import org.objectweb.asm.util.TraceClassVisitor
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.lang.instrument.ClassFileTransformer
@@ -17,104 +21,69 @@ import java.security.ProtectionDomain
  * @author Kirill Timofeev
  */
 
-private sealed class WithContextVarIndex(open val index: Int)
-
-private data class CoroutineImplVar(override val index: Int) : WithContextVarIndex(index)
-private data class ContinuationVar(override val index: Int) : WithContextVarIndex(index)
-
-private fun isCoroutineImplOrSubType(variable: LocalVariableNode): Boolean { //fiXME should we really check the type?
-    if (Type.getType(variable.desc) == COROUTINE_IMPL_TYPE) {
-        return true
-    }
-    val extends = typesInfo[Type.getType(variable.desc).internalName]?.extends ?: return false
-    return extends == COROUTINE_IMPL_TYPE.internalName
-}
+private fun ClassNode.isCoroutineImplOrSubType()  //FIXME should we really check the type?
+        = name == COROUTINE_IMPL_TYPE.internalName || superName == COROUTINE_IMPL_TYPE.internalName
 
 private fun argumentVarIndex(argumentTypes: Array<Type>, argumentIndex: Int)
         = argumentTypes.take(argumentIndex).map { it.size }.sum()
 
-private fun MethodNode.findContinuationVarIndex(): WithContextVarIndex {
-    //FIXME use getfield instruction instead
-    val thisVar = localVariables?.map { it as LocalVariableNode }?.firstOrNull { it.name == "this" }
-    if (name.contains("doResume")) {
-        println("this: ${thisVar?.name}, ${thisVar?.desc}")
-    }
-    if (thisVar != null && isCoroutineImplOrSubType(thisVar)) {
-        return CoroutineImplVar(thisVar.index)
-    }
-    val continuationIndex = continuationArgumentIndex(this)
-            ?: throw IllegalArgumentException("Can't find Continuation in ${desc}")
-    return ContinuationVar(argumentVarIndex(Type.getArgumentTypes(desc), continuationIndex))
+private fun MethodNode.findContinuationVarIndex(classNode: ClassNode): Int {
+    if (classNode.isCoroutineImplOrSubType()) return 0 //index of `this` variable
+    require(isSuspend(), { "Method should be suspend, got $desc instead" })
+    val continuationArgIndex = Type.getType(desc).argumentTypes.size - continuationOffsetFromEndInDesc(name)
+    val isStatic = access and Opcodes.ACC_STATIC != 0
+    return argumentVarIndex(Type.getArgumentTypes(desc), continuationArgIndex) + if (isStatic) 0 else 1
 }
 
-private data class ExtendsImplements(val extends: String?, val implements: List<String>)
-
-private val typesInfo = mutableMapOf<String, ExtendsImplements>() //FIXME
-
-
-private fun addSuspendCallHandlers(continuationVarIndex: Int, method: MethodNode, classNode: ClassNode) {
-    val lines = methodCallLineNumber(method.instructions)
-    for (i in method.instructions) {
+private fun MethodNode.addSuspendCallHandlers(continuationVarIndex: Int, classNode: ClassNode) {
+    val lines = methodCallLineNumber(instructions)
+    for (i in instructions) {
         if (i is MethodInsnNode && i.isSuspend()) {
-            println("instrument call ${i.owner}.${i.name} from ${classNode.name}.${method.name} at ${classNode.sourceFile}:${lines[i]}")
-            method.instructions.insert(i, generateAfterSuspendCall(i, continuationVarIndex, method.name, classNode.sourceFile, lines[i] ?: -1))
+            //println("instrument call ${i.owner}.${i.name}(${i.desc}) " +
+            //        "from ${classNode.name}.${name} at ${classNode.sourceFile}:${lines[i]}, " +
+            //        "cont index = $continuationVarIndex")
+            instructions.insert(i, generateAfterSuspendCall(i, continuationVarIndex, name, classNode.sourceFile, lines[i] ?: -1))
         }
     }
 }
 
-private fun MethodNode.transformMethod(classNode: ClassNode): DoResumeForSuspend? {
+private fun MethodNode.transformMethod(classNode: ClassNode) {
     val isStateMachine = isStateMachineForAnonymousSuspendFunction()
     val isDoResume = isDoResume()
     val isSuspend = isSuspend()
-    if (!isSuspend && !isStateMachine && !isDoResume) return null
-    val continuation = findContinuationVarIndex()
-    println(">>in method ${classNode.name}.${name} with description: ${desc}\ncont: $continuation")
+    if (!isSuspend && !isStateMachine && !isDoResume) return
+    val continuation = findContinuationVarIndex(classNode)
+    //println(">>in method ${classNode.name}.${name} with description: ${desc}")
     if (isSuspend || isStateMachine) {
-        addSuspendCallHandlers(continuation.index, this, classNode)
+        addSuspendCallHandlers(continuation, classNode)
     }
     if (isDoResume) {
-        val function = if (isStateMachine)
+        val methodId = buildMethodIdWithInfo(this, classNode)
+        val forFunction = if (isStateMachine)
             AnonymousSuspendFunction(MethodId(name, classNode.name, desc)) else
             correspondingSuspendFunctionForDoResume()
-        instructions.insert(generateHandleDoResumeCall(continuation.index, function.method))
-        return DoResumeForSuspend(buildMethodId(this, classNode)
-                .copy(info = MethodInfo(isStateMachine, isSuspend, isDoResume, isStateMachine)), function)
+        doResumeToSuspendFunctions += DoResumeForSuspend(methodId, forFunction)
+        instructions.insert(generateHandleDoResumeCall(continuation, doResumeToSuspendFunctions.lastIndex))
     }
-    return null
 }
 
 class CoroutinesDebugTransformer : ClassFileTransformer {
-    override fun transform(loader: ClassLoader?, className: String, classBeingRedefined: Class<*>,
-                           protectionDomain: ProtectionDomain, classfileBuffer: ByteArray): ByteArray {
+    override fun transform(loader: ClassLoader?, className: String?, classBeingRedefined: Class<*>?,
+                           protectionDomain: ProtectionDomain?, classfileBuffer: ByteArray?): ByteArray {
         val reader = ClassReader(classfileBuffer)
         val classNode = ClassNode()
         reader.accept(classNode, 0)
 
-        typesInfo[classNode.name] = ExtendsImplements(classNode.superName, classNode.interfaces.map { it as String })
         for (method in classNode.methods.map { it as MethodNode }) {
             try {
-                val doResumeForSuspend = method.transformMethod(classNode)
-                val oldSz = doResumeToSuspendFunction.size
-                // todo: simplify this logic
-                if (doResumeForSuspend != null) {
-                    updateDoResumeToSuspendFunctionMap(doResumeForSuspend)
-                } else {
-                    val m = buildMethodId(method, classNode)
-                    val info = m.info
-                    if (info != null && (info.isSuspend || info.isDoResume || info.isStateMachine)) {
-                        updateDoResumeToSuspendFunctionMap(m)
-                    }
-                }
-                if (doResumeToSuspendFunction.size != oldSz) {
-                    println("doResumeToSuspendFunction:")
-                    for ((k, v) in doResumeToSuspendFunction) {
-                        println("$k : $v")
-                    }
-                }
+                method.transformMethod(classNode)
             } catch (e: Exception) {
                 val trace = StringWriter()
-                e.printStackTrace(PrintWriter(trace));
-                println("while instrumenting $className.${method.name} with desc: ${method.desc} exception : $trace")
+                e.printStackTrace(PrintWriter(trace))
+                val byteCodeStr = StringWriter()
+                classNode.accept(TraceClassVisitor(PrintWriter(byteCodeStr)))
+                println("while instrumenting $className.${method.name} with desc: ${method.desc} exception : $trace" +
+                        "\n byte code: $byteCodeStr")
             }
         }
         val writer = ClassWriter(ClassWriter.COMPUTE_MAXS)
