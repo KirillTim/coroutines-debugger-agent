@@ -1,9 +1,6 @@
 package kotlinx.coroutines.debug.transformer
 
-import kotlinx.coroutines.debug.manager.AnonymousSuspendFunction
-import kotlinx.coroutines.debug.manager.DoResumeForSuspend
-import kotlinx.coroutines.debug.manager.MethodId
-import kotlinx.coroutines.debug.manager.doResumeToSuspendFunctions
+import kotlinx.coroutines.debug.manager.*
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
@@ -42,7 +39,10 @@ private fun MethodNode.addSuspendCallHandlers(continuationVarIndex: Int, classNo
             //println("instrument call ${i.owner}.${i.name}(${i.desc}) " +
             //        "from ${classNode.name}.${name} at ${classNode.sourceFile}:${lines[i]}, " +
             //        "cont index = $continuationVarIndex")
-            instructions.insert(i, generateAfterSuspendCall(i, continuationVarIndex, name, classNode.sourceFile, lines[i] ?: -1))
+            suspendCalls += FunctionCall(i.buildMethodId(),
+                    CallPosition(classNode.sourceFile, lines[i] ?: -1),
+                    buildMethodId(classNode))
+            instructions.insert(i, generateAfterSuspendCall(continuationVarIndex, suspendCalls.lastIndex))
         }
     }
 }
@@ -58,11 +58,13 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
         addSuspendCallHandlers(continuation, classNode)
     }
     if (isDoResume) {
-        val methodId = buildMethodIdWithInfo(this, classNode)
+        val methodId = buildMethodIdWithInfo(classNode)
         val forFunction = if (isStateMachine)
             AnonymousSuspendFunction(MethodId(name, classNode.name, desc)) else
             correspondingSuspendFunctionForDoResume()
-        doResumeToSuspendFunctions += DoResumeForSuspend(methodId, forFunction)
+        val doResumeFirstInsnPosition = CallPosition(classNode.sourceFile, firstInstructionLineNumber())
+                .takeIf { isStateMachine }
+        doResumeToSuspendFunctions += DoResumeForSuspend(methodId, forFunction, doResumeFirstInsnPosition)
         instructions.insert(generateHandleDoResumeCall(continuation, doResumeToSuspendFunctions.lastIndex))
     }
 }

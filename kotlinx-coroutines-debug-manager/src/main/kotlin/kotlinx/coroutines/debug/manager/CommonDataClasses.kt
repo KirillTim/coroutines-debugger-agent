@@ -18,10 +18,19 @@ data class MethodIdWithInfo(val method: MethodId, val info: MethodInfo, private 
     override fun toString() = if (pretty.isNotEmpty()) pretty else "$method" + info
 }
 
-data class DoResumeForSuspend(val doResume: MethodIdWithInfo, val suspend: SuspendFunction)
+data class CallPosition(val file: String, val line: Int) {
+    companion object {
+        val UNKNOWN = CallPosition("unknown", -1)
+    }
+}
 
-data class FunctionCall(val function: MethodId, val file: String, val line: Int, val fromFunction: String? = null) {
-    override fun toString() = "$function at $file;$line"
+data class DoResumeForSuspend(
+        val doResume: MethodIdWithInfo,
+        val suspend: SuspendFunction,
+        val doResumeCallPosition: CallPosition? = null)
+
+data class FunctionCall(val function: MethodId, val position: CallPosition, val fromFunction: MethodId? = null) {
+    override fun toString() = "$function at ${position.file}:${position.line}"
 }
 
 sealed class SuspendFunction(open val method: MethodId)

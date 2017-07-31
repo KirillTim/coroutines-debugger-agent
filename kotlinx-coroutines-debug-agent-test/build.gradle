@@ -1,7 +1,7 @@
 dependencies {
     testCompile 'junit:junit:4.12'
     testCompile project(":kotlinx-coroutines-debug-agent")
-    testCompile "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.16"
+    testCompile "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.17"
 }
 
 task runTest(type: JavaExec, dependsOn: build) { //FIXME

@@ -1,5 +1,6 @@
 package kotlinx.coroutines.debug.manager
 
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.CoroutineContext
 import kotlin.coroutines.experimental.intrinsics.COROUTINE_SUSPENDED
@@ -10,7 +11,9 @@ import kotlin.coroutines.experimental.intrinsics.COROUTINE_SUSPENDED
 
 val doResumeToSuspendFunctions = mutableListOf<DoResumeForSuspend>()
 
-val stacks = mutableMapOf<CoroutineContext, CoroutineStack>()
+val suspendCalls = mutableListOf<FunctionCall>()
+
+val stacks = ConcurrentHashMap<CoroutineContext, CoroutineStack>()
 
 private fun emptyStack(context: CoroutineContext)
         = CoroutineStackImpl(context, { System.err.println("logger: \n" + this.prettyPrint()) })
@@ -18,24 +21,20 @@ private fun emptyStack(context: CoroutineContext)
 //functions called from instrumented(user) code
 object Manager {
     @JvmStatic
-    fun afterSuspendCall(result: Any, continuation: Continuation<*>, name: String, desc: String, owner: String,
-                         calledFromFunction: String, fileAndLineNumber: String) { //FIXME
+    fun afterSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) {
         val suspended = result === COROUTINE_SUSPENDED
-        val methodId = MethodId(name, owner, desc)
-        val (file, lineNumber) = fileAndLineNumber.split(':')
-        System.err.println("suspend call of $methodId at $file:$lineNumber from $calledFromFunction, with " +
+        val call = suspendCalls[functionCallIndex]
+        System.err.println("suspend call of ${call.function} at ${call.position.file}:${call.position.line} from ${call.fromFunction}, with " +
                 "${continuation.hashCode()} : ${if (suspended) "suspended" else "result = $result"}")
         try {
             if (suspended) {
-                val func = doResumeToSuspendFunctions.firstOrNull { it.suspend.method == methodId }?.suspend
-                        ?: UnknownBodySuspendFunction(methodId)
                 val context = continuation.context
                 val stack = stacks.getOrPut(context, { emptyStack(context) })
-                stack.handleSuspendFunctionReturn(continuation, FunctionCall(func.method, file, lineNumber.toInt(), calledFromFunction))
+                stack.handleSuspendFunctionReturn(continuation, call)
             }
         } catch (e: Exception) {
-            System.err.println("afterSuspendCall($result, ${ObjectPrinter.objToString(continuation)}, $methodId " +
-                    "at $file:$lineNumber):${e.printStackTrace()}")
+            System.err.println("afterSuspendCall($result, ${ObjectPrinter.objToString(continuation)}, ${call.function} " +
+                    "at ${call.position.file}:${call.position.line}):${e.printStackTrace()}")
         }
     }
 

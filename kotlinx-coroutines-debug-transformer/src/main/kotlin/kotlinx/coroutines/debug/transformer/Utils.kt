@@ -67,15 +67,21 @@ private fun prettyPrint(method: MethodId, argumentValues: List<Any>? = null): St
     return "${method.owner.replace('/', '.')}.${method.name}($arguments): $returnType"
 }
 
-internal fun buildMethodIdWithInfo(method: MethodNode, classNode: ClassNode): MethodIdWithInfo {
-    val isSMForAnonymous = method.isStateMachineForAnonymousSuspendFunction() //FIXME how to determine is anonymous or not?
-    val info = MethodInfo(isSMForAnonymous, method.isSuspend(), method.isDoResume(), isSMForAnonymous)
-    val methodId = MethodId(method.name, classNode.name, method.desc)
+internal fun MethodInsnNode.buildMethodId()
+        = MethodId(name, owner, desc)
+
+internal fun MethodNode.buildMethodId(classNode: ClassNode)
+        = MethodId(name, classNode.name, desc)
+
+internal fun MethodNode.buildMethodIdWithInfo(classNode: ClassNode): MethodIdWithInfo {
+    val isSMForAnonymous = isStateMachineForAnonymousSuspendFunction() //FIXME how to determine is anonymous or not?
+    val info = MethodInfo(isSMForAnonymous, isSuspend(), isDoResume(), isSMForAnonymous)
+    val methodId = buildMethodId(classNode)
     return MethodIdWithInfo(methodId, info, prettyPrint(methodId))
 }
 
-internal fun firstInstructionLineNumber(method: MethodNode) = //FIXME
-        method.instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.line }.min() ?: -1
+internal fun MethodNode.firstInstructionLineNumber() = //FIXME
+        instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.line }.min() ?: -1
 
 private fun methodCallNodeToLabelNode(instructions: InsnList): Map<MethodInsnNode, LabelNode> {
     val map = mutableMapOf<MethodInsnNode, LabelNode>()

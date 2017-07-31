@@ -31,7 +31,7 @@ class CoroutineStackImpl(override val context: CoroutineContext,
     override fun handleSuspendFunctionReturn(continuation: Continuation<*>, functionCall: FunctionCall) {
         temporaryStack.add(CoroutineStackFrame(continuation, functionCall))
         if (continuation === topCurrentContinuation
-                && functionCall.fromFunction == stack.firstOrNull()?.functionCall?.function?.name) {
+                && functionCall.fromFunction == stack.firstOrNull()?.functionCall?.function) {
             applyStack()
         }
     }
@@ -59,7 +59,8 @@ class CoroutineStackImpl(override val context: CoroutineContext,
     override fun handleDoResume(continuation: Continuation<*>, function: DoResumeForSuspend) {
         System.err.println("handleDoResume for ${function.doResume}, ${function.suspend.method}")
         if (entryPoint == null) {
-            entryPoint = CoroutineStackFrame(continuation, FunctionCall(function.doResume.method, "unknown", -1)) //FIXME
+            entryPoint = CoroutineStackFrame(continuation,
+                    FunctionCall(function.doResume.method, function.doResumeCallPosition ?: CallPosition.UNKNOWN))
             stack.add(entryPoint!!)
             topCurrentContinuation = continuation
             System.err.println("entry point: ${entryPoint?.prettyPrint()}")
