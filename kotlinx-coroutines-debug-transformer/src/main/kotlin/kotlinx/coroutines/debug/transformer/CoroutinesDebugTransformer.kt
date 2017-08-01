@@ -8,9 +8,6 @@ import org.objectweb.asm.Type
 import org.objectweb.asm.tree.ClassNode
 import org.objectweb.asm.tree.MethodInsnNode
 import org.objectweb.asm.tree.MethodNode
-import org.objectweb.asm.util.TraceClassVisitor
-import java.io.PrintWriter
-import java.io.StringWriter
 import java.lang.instrument.ClassFileTransformer
 import java.security.ProtectionDomain
 
@@ -36,9 +33,11 @@ private fun MethodNode.addSuspendCallHandlers(continuationVarIndex: Int, classNo
     val lines = methodCallLineNumber(instructions)
     for (i in instructions) {
         if (i is MethodInsnNode && i.isSuspend()) {
-            //println("instrument call ${i.owner}.${i.name}(${i.desc}) " +
-            //        "from ${classNode.name}.${name} at ${classNode.sourceFile}:${lines[i]}, " +
-            //        "cont index = $continuationVarIndex")
+            Logger.default.debug {
+                "instrument call ${i.owner}.${i.name}(${i.desc}) " +
+                        "from ${classNode.name}.${name} at ${classNode.sourceFile}:${lines[i]}, " +
+                        "cont index = $continuationVarIndex"
+            }
             suspendCalls += FunctionCall(i.buildMethodId(),
                     CallPosition(classNode.sourceFile, lines[i] ?: -1),
                     buildMethodId(classNode))
@@ -53,7 +52,7 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
     val isSuspend = isSuspend()
     if (!isSuspend && !isStateMachine && !isDoResume) return
     val continuation = findContinuationVarIndex(classNode)
-    //println(">>in method ${classNode.name}.${name} with description: ${desc}")
+    //Logger.default.debug { ">>in method ${classNode.name}.${name} with description: ${desc}" }
     if (isSuspend || isStateMachine) {
         addSuspendCallHandlers(continuation, classNode)
     }
@@ -80,12 +79,10 @@ class CoroutinesDebugTransformer : ClassFileTransformer {
             try {
                 method.transformMethod(classNode)
             } catch (e: Exception) {
-                val trace = StringWriter()
-                e.printStackTrace(PrintWriter(trace))
-                val byteCodeStr = StringWriter()
-                classNode.accept(TraceClassVisitor(PrintWriter(byteCodeStr)))
-                println("while instrumenting $className.${method.name} with desc: ${method.desc} exception : $trace" +
-                        "\n byte code: $byteCodeStr")
+                val message = "while instrumenting $className.${method.name} with desc: ${method.desc} " +
+                        "exception : ${e.stackTraceToString()}"
+                Logger.default.error { message }
+                Logger.default.debug { message + "\nbyte code: ${classNode.byteCodeString()}" }
             }
         }
         val writer = ClassWriter(ClassWriter.COMPUTE_MAXS)

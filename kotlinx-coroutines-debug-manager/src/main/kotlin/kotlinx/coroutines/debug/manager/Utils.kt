@@ -1,13 +1,24 @@
 package kotlinx.coroutines.debug.manager
 
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.lang.reflect.Modifier
 
 /**
  * @author Kirill Timofeev
  */
 
-//debug only
-fun Any?.objToString() = ObjectPrinter.objToString(this)
+fun Any?.toStringSafe() = try {
+    toString()
+} catch (e: Exception) {
+    "<can't be printed ($e)>"
+}
+
+fun Exception.stackTraceToString(): String {
+    val writer = StringWriter()
+    printStackTrace(PrintWriter(writer))
+    return writer.toString()
+}
 
 //debug only
 fun Any.fullInfo() = ObjectPrinter.fullInfo(this)
@@ -15,22 +26,15 @@ fun Any.fullInfo() = ObjectPrinter.fullInfo(this)
 //debug only
 object ObjectPrinter { //may be called from user code for debug sometimes
     @JvmStatic
-    fun objToString(obj: Any?) = try {
-        "$obj"
-    } catch (e: Exception) {
-        "<can't be printed>"
-    }
-
-    @JvmStatic
     fun fullInfo(obj: Any) =
             buildString {
-                append("fields of ${objToString(obj)} with type: ${obj.javaClass.name}\n")
+                append("fields of ${obj.toStringSafe()} with type: ${obj.javaClass.name}\n")
                 val fields = obj.javaClass.declaredFields
                 for (f in fields) {
                     append(try {
                         f.isAccessible = true
                         val prefix = if (Modifier.isPrivate(f.modifiers)) "(private) " else ""
-                        "$prefix ${f.name} : ${objToString(f.get(obj))}\n"
+                        "$prefix ${f.name} : ${f.get(obj).toStringSafe()}\n"
                     } catch (e: Exception) {
                         "can't fullInfo value of ${f.name}\n"
                     })
@@ -40,7 +44,7 @@ object ObjectPrinter { //may be called from user code for debug sometimes
                     if (m.name.startsWith("get") && m.genericParameterTypes.isEmpty()) {
                         m.isAccessible = true
                         append(try {
-                            "${m.name} : ${objToString(m.invoke(obj))}\n"
+                            "${m.name} : ${m.invoke(obj).toStringSafe()}\n"
                         } catch (e: Exception) {
                             "can't invoke ${m.name}\n"
                         })

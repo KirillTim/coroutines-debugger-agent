@@ -37,19 +37,16 @@ class CoroutineStackImpl(override val context: CoroutineContext,
     }
 
     private fun applyStack() {
-        /*System.err.println("stack applied")
-        System.err.println("topCurrentContinuation hash: ${topCurrentContinuation?.hashCode()}")
-        System.err.println("entry point: hash: ${entryPoint?.continuation?.hashCode()}, func: ${entryPoint?.functionCall}")
-        try {
-            System.err.println("temp: ${temporaryStack.joinToString("\n", transform = { it.prettyPrint() })}")
-        } catch (e: Exception) {
-            System.err.println("can't  fullInfo temporaryStack")
+        Logger.default.debug {
+            buildString {
+                append("stack applied\n")
+                append("topCurrentContinuation hash: ${topCurrentContinuation?.hashCode()}\n")
+                val (cont, call) = entryPoint!!
+                append("entry point: hash: ${cont.hashCode()}, func: ${call}\n")
+                append("temp: ${temporaryStack.joinToString("\n", transform = { it.prettyPrint() })}\n")
+                append("stack: ${stack.joinToString("\n", transform = { it.prettyPrint() })}")
+            }
         }
-        try {
-            System.err.println("stack: ${stack.joinToString("\n", transform = { it.prettyPrint() })}")
-        } catch (e: Exception) {
-            System.err.println("can't  fullInfo stack")
-        }*/
         stack.addAll(0, temporaryStack)
         temporaryStack.clear()
         topCurrentContinuation = null
@@ -57,28 +54,27 @@ class CoroutineStackImpl(override val context: CoroutineContext,
     }
 
     override fun handleDoResume(continuation: Continuation<*>, function: DoResumeForSuspend) {
-        System.err.println("handleDoResume for ${function.doResume}, ${function.suspend.method}")
+        Logger.default.debug { "handleDoResume for ${function.doResume}, ${function.suspend.method}" }
         if (entryPoint == null) {
             entryPoint = CoroutineStackFrame(continuation,
                     FunctionCall(function.doResume.method, function.doResumeCallPosition ?: CallPosition.UNKNOWN))
             stack.add(entryPoint!!)
             topCurrentContinuation = continuation
-            System.err.println("entry point: ${entryPoint?.prettyPrint()}")
+            Logger.default.debug { "entry point: ${entryPoint?.prettyPrint()}" }
             return
         }
-        val currentTopFrame = if (function.doResume.method != function.suspend.method) {
-            System.err.println("not doResume for self")
+        val currentTopFrame = if (function.doResume.method != function.suspend.method)
             stack.indexOfLast { it.continuation === continuation } + 1
-        } else {  //doResume for itself, clean everything with our continuation up to doResume call
-            System.err.println("doResume for self")
-            stack.indexOfLast { it.continuation == continuation && it.functionCall.function == function.doResume.method }
-        }
-        System.err.println("currentTopFrame: $currentTopFrame")
+        else  //doResume for itself, clean everything with our continuation up to doResume call
+            stack.indexOfLast {
+                it.continuation === continuation
+                        && it.functionCall.function == function.doResume.method
+            }
+
         if (currentTopFrame > 0) {
             topCurrentContinuation = continuation
             stack = stack.drop(currentTopFrame).toMutableList()
         }
-        System.err.println("stack size after handleDoResume: ${stack.size}")
     }
 
     fun prettyPrint() = "$context:\n" + //FIXME

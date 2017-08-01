@@ -4,6 +4,9 @@ import kotlinx.coroutines.debug.manager.*
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.Type
 import org.objectweb.asm.tree.*
+import org.objectweb.asm.util.TraceClassVisitor
+import java.io.PrintWriter
+import java.io.StringWriter
 
 /**
  * @author Kirill Timofeev
@@ -69,13 +72,13 @@ internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFuncti
 private fun Type.isResumeMethodDesc() =
         returnType == OBJECT_TYPE && argumentTypes.contentEquals(arrayOf(OBJECT_TYPE, THROWABLE_TYPE))
 
-fun MethodNode.isDoResume() = name == "doResume"
+internal fun MethodNode.isDoResume() = name == "doResume"
         && Type.getType(desc).isResumeMethodDesc() && (access and Opcodes.ACC_ABSTRACT == 0)
 
 
-fun MethodNode.isSuspend() = isSuspend(name, desc)
+internal fun MethodNode.isSuspend() = isSuspend(name, desc)
 
-fun MethodInsnNode.isSuspend() = isSuspend(name, desc)
+internal fun MethodInsnNode.isSuspend() = isSuspend(name, desc)
 
 internal fun continuationOffsetFromEndInDesc(name: String) = if (name.endsWith("\$default")) 3 else 1
 
@@ -109,6 +112,12 @@ internal fun MethodNode.buildMethodIdWithInfo(classNode: ClassNode): MethodIdWit
 
 internal fun MethodNode.firstInstructionLineNumber() = //FIXME
         instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.line }.min() ?: -1
+
+internal fun ClassNode.byteCodeString(): String {
+    val writer = StringWriter()
+    accept(TraceClassVisitor(PrintWriter(writer)))
+    return writer.toString()
+}
 
 private fun methodCallNodeToLabelNode(instructions: InsnList): Map<MethodInsnNode, LabelNode> {
     val map = mutableMapOf<MethodInsnNode, LabelNode>()
