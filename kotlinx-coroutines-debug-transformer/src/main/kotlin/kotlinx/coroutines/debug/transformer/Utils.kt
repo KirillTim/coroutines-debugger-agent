@@ -15,28 +15,55 @@ internal val STRING_TYPE = Type.getType(String::class.java)
 internal val CONTINUATION_TYPE = Type.getType("Lkotlin/coroutines/experimental/Continuation;")
 internal val COROUTINE_IMPL_TYPE = Type.getType("Lkotlin/coroutines/experimental/jvm/internal/CoroutineImpl;")
 
-private fun AbstractInsnNode?.isGetCOROUTINE_SUSPENDED() =
-        this is MethodInsnNode && name == "getCOROUTINE_SUSPENDED"
-                && owner == "kotlin/coroutines/experimental/intrinsics/IntrinsicsKt"
-                && desc == "()${OBJECT_TYPE.descriptor}"
+private val AbstractInsnNode?.isGetCOROUTINE_SUSPENDED: Boolean
+    get() = this is MethodInsnNode && name == "getCOROUTINE_SUSPENDED"
+            && owner == "kotlin/coroutines/experimental/intrinsics/IntrinsicsKt"
+            && desc == "()${OBJECT_TYPE.descriptor}"
 
-private fun AbstractInsnNode?.isGetLabel() =
-        this is FieldInsnNode && name == "label"
+private val AbstractInsnNode?.isGetLabel: Boolean
+    get() = this is FieldInsnNode && name == "label"
 
-internal fun MethodNode.isStateMachineForAnonymousSuspendFunction() =
-        isDoResume() &&
-                instructions[0].isGetCOROUTINE_SUSPENDED() &&
-                instructions[1] is LabelNode &&
-                instructions[5].isGetLabel() &&
-                instructions[6] is TableSwitchInsnNode
+private val AbstractInsnNode.isMeaningful: Boolean
+    get() = when (type) {
+        AbstractInsnNode.LABEL, AbstractInsnNode.LINE, AbstractInsnNode.FRAME -> false
+        else -> true
+    }
+
+private val AbstractInsnNode.nextMeaningful: AbstractInsnNode?
+    get() {
+        var cur = next
+        while (cur != null && !cur.isMeaningful)
+            cur = cur.next
+        return cur
+    }
+
+private val AbstractInsnNode.previousMeaningful: AbstractInsnNode?
+    get() {
+        var cur = previous
+        while (cur != null && !cur.isMeaningful)
+            cur = cur.previous
+        return cur
+    }
+
+private fun AbstractInsnNode?.isASTORE() = this != null && opcode == Opcodes.ASTORE
+private fun AbstractInsnNode?.isALOAD(operand: Int? = null)
+        = this != null && opcode == Opcodes.ALOAD && (operand == null || (this is VarInsnNode && `var` == operand))
+
+internal fun MethodNode.isStateMachineForAnonymousSuspendFunction()
+        = isDoResume() &&
+        instructions[0].takeIf { it.isGetCOROUTINE_SUSPENDED }
+                ?.nextMeaningful.takeIf { it.isASTORE() }
+                ?.nextMeaningful.takeIf { it.isALOAD(0) }
+                ?.nextMeaningful.takeIf { it.isGetLabel }
+                ?.nextMeaningful is TableSwitchInsnNode
 
 internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFunction {
     require(isDoResume()) { "${name} should be doResume functionCall" }
-    val aReturn = instructions.last.previous // todo: too fragile
-    require(aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) { "instruction before last must be areturn" }
-    val suspendFunctionCall = aReturn.previous as MethodInsnNode
-    require(suspendFunctionCall.opcode == Opcodes.INVOKESTATIC)
-    return NamedSuspendFunction(MethodId(suspendFunctionCall.name, suspendFunctionCall.owner, suspendFunctionCall.desc))
+    val aReturn = if (instructions.last.isMeaningful) instructions.last else instructions.last.previousMeaningful
+    require(aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) { "last meaningful instruction must be areturn" }
+    val suspendFunCall = aReturn?.previousMeaningful as? MethodInsnNode
+    require(suspendFunCall?.opcode == Opcodes.INVOKESTATIC) { "can't find corresponding suspend function call" }
+    return NamedSuspendFunction(MethodId(suspendFunCall!!.name, suspendFunCall.owner, suspendFunCall.desc))
 }
 
 private fun Type.isResumeMethodDesc() =
