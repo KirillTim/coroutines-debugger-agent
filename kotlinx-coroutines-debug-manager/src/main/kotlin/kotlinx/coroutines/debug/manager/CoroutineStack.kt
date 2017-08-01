@@ -29,6 +29,12 @@ class CoroutineStackImpl(override val context: CoroutineContext,
     override fun getSuspendedStack(): List<FunctionCall> = stack.map { it.functionCall }
 
     override fun handleSuspendFunctionReturn(continuation: Continuation<*>, functionCall: FunctionCall) {
+        if (functionCall.function.name.endsWith("\$default")) {
+            val delegatedCall = temporaryStack.lastOrNull()
+            requireNotNull(delegatedCall != null, { "can't find delegated call for  $functionCall" })
+            temporaryStack.removeAt(temporaryStack.lastIndex)
+            temporaryStack += delegatedCall!!.copy(functionCall = delegatedCall.functionCall.copy(position = functionCall.position))
+        }
         temporaryStack.add(CoroutineStackFrame(continuation, functionCall))
         if (continuation === topCurrentContinuation
                 && functionCall.fromFunction == stack.firstOrNull()?.functionCall?.function) {
