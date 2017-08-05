@@ -18,21 +18,24 @@ internal val STRING_TYPE = Type.getType(String::class.java)
 internal val CONTINUATION_TYPE = Type.getType("Lkotlin/coroutines/experimental/Continuation;")
 internal val COROUTINE_IMPL_TYPE = Type.getType("Lkotlin/coroutines/experimental/jvm/internal/CoroutineImpl;")
 
-private val AbstractInsnNode?.isGetCOROUTINE_SUSPENDED: Boolean
+internal val AbstractInsnNode?.isGetCOROUTINE_SUSPENDED: Boolean
     get() = this is MethodInsnNode && name == "getCOROUTINE_SUSPENDED"
             && owner == "kotlin/coroutines/experimental/intrinsics/IntrinsicsKt"
             && desc == "()${OBJECT_TYPE.descriptor}"
 
-private val AbstractInsnNode?.isGetLabel: Boolean
+internal val AbstractInsnNode?.isGetLabel: Boolean
     get() = this is FieldInsnNode && name == "label"
 
-private val AbstractInsnNode.isMeaningful: Boolean
+internal val AbstractInsnNode?.isARETURN: Boolean
+    get() = this != null && opcode == Opcodes.ARETURN
+
+internal val AbstractInsnNode.isMeaningful: Boolean
     get() = when (type) {
         AbstractInsnNode.LABEL, AbstractInsnNode.LINE, AbstractInsnNode.FRAME -> false
         else -> true
     }
 
-private val AbstractInsnNode.nextMeaningful: AbstractInsnNode?
+internal val AbstractInsnNode.nextMeaningful: AbstractInsnNode?
     get() {
         var cur = next
         while (cur != null && !cur.isMeaningful)
@@ -40,7 +43,7 @@ private val AbstractInsnNode.nextMeaningful: AbstractInsnNode?
         return cur
     }
 
-private val AbstractInsnNode.previousMeaningful: AbstractInsnNode?
+internal val AbstractInsnNode.previousMeaningful: AbstractInsnNode?
     get() {
         var cur = previous
         while (cur != null && !cur.isMeaningful)
@@ -48,8 +51,8 @@ private val AbstractInsnNode.previousMeaningful: AbstractInsnNode?
         return cur
     }
 
-private fun AbstractInsnNode?.isASTORE() = this != null && opcode == Opcodes.ASTORE
-private fun AbstractInsnNode?.isALOAD(operand: Int? = null)
+internal fun AbstractInsnNode?.isASTORE() = this != null && opcode == Opcodes.ASTORE
+internal fun AbstractInsnNode?.isALOAD(operand: Int? = null)
         = this != null && opcode == Opcodes.ALOAD && (operand == null || (this is VarInsnNode && `var` == operand))
 
 internal fun MethodNode.isStateMachineForAnonymousSuspendFunction()
@@ -60,21 +63,30 @@ internal fun MethodNode.isStateMachineForAnonymousSuspendFunction()
                 ?.nextMeaningful.takeIf { it.isGetLabel }
                 ?.nextMeaningful is TableSwitchInsnNode
 
+internal fun InsnList.lastMeaningful()
+        = if (last.isMeaningful) last else last.previousMeaningful
+
+internal fun InsnList.lastARETURN(): AbstractInsnNode? {
+    var cur = lastMeaningful()
+    while (cur != null && !cur.isARETURN)
+        cur = cur.previous
+    return cur
+}
+
 internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFunction {
     require(isDoResume()) { "${name} should be doResume functionCall" }
-    val aReturn = if (instructions.last.isMeaningful) instructions.last else instructions.last.previousMeaningful
-    require(aReturn is InsnNode && aReturn.opcode == Opcodes.ARETURN) { "last meaningful instruction must be areturn" }
-    val suspendFunCall = aReturn?.previousMeaningful as? MethodInsnNode
+    val last = instructions.lastMeaningful()
+    require(last.isARETURN) { "last meaningful instruction must be areturn" }
+    val suspendFunCall = last?.previousMeaningful as? MethodInsnNode
     require(suspendFunCall?.opcode == Opcodes.INVOKESTATIC) { "can't find corresponding suspend function call" }
     return NamedSuspendFunction(MethodId(suspendFunCall!!.name, suspendFunCall.owner, suspendFunCall.desc))
 }
 
-private fun Type.isResumeMethodDesc() =
+internal fun Type.isResumeMethodDesc() =
         returnType == OBJECT_TYPE && argumentTypes.contentEquals(arrayOf(OBJECT_TYPE, THROWABLE_TYPE))
 
 internal fun MethodNode.isDoResume() = name == "doResume"
         && Type.getType(desc).isResumeMethodDesc() && (access and Opcodes.ACC_ABSTRACT == 0)
-
 
 internal fun MethodNode.isSuspend() = isSuspend(name, desc)
 

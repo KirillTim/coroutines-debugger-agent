@@ -13,13 +13,20 @@ private data class CoroutineStackFrame(val continuation: Continuation<*>, val fu
 
 interface CoroutineStack {
     val context: CoroutineContext
+
     fun getSuspendedStack(): List<FunctionCall>
-    fun handleSuspendFunctionReturn(continuation: Continuation<*>, functionCall: FunctionCall)
+
+    fun isEntryPoint(method: MethodId): Boolean //FIXME better signature?
+
+    /**
+     * @return true if new frames were add to stack, false otherwise
+     */
+    fun handleSuspendFunctionReturn(continuation: Continuation<*>, functionCall: FunctionCall): Boolean
+
     fun handleDoResume(continuation: Continuation<*>, function: DoResumeForSuspend)
 }
 
-class CoroutineStackImpl(override val context: CoroutineContext,
-                         val onCoroutineSuspend: CoroutineStackImpl.() -> Unit) : CoroutineStack {
+class CoroutineStackImpl(override val context: CoroutineContext) : CoroutineStack {
 
     private var stack = mutableListOf<CoroutineStackFrame>()
     private val temporaryStack = mutableListOf<CoroutineStackFrame>()
@@ -28,7 +35,9 @@ class CoroutineStackImpl(override val context: CoroutineContext,
 
     override fun getSuspendedStack(): List<FunctionCall> = stack.map { it.functionCall }
 
-    override fun handleSuspendFunctionReturn(continuation: Continuation<*>, functionCall: FunctionCall) {
+    override fun isEntryPoint(method: MethodId) = entryPoint?.functionCall?.function == method
+
+    override fun handleSuspendFunctionReturn(continuation: Continuation<*>, functionCall: FunctionCall): Boolean {
         if (functionCall.function.name.endsWith("\$default")) {
             val delegatedCall = temporaryStack.lastOrNull()
             requireNotNull(delegatedCall != null, { "can't find delegated call for  $functionCall" })
@@ -39,7 +48,9 @@ class CoroutineStackImpl(override val context: CoroutineContext,
         if (continuation === topCurrentContinuation
                 && functionCall.fromFunction == stack.firstOrNull()?.functionCall?.function) {
             applyStack()
+            return true
         }
+        return false
     }
 
     private fun applyStack() {
@@ -56,11 +67,10 @@ class CoroutineStackImpl(override val context: CoroutineContext,
         stack.addAll(0, temporaryStack)
         temporaryStack.clear()
         topCurrentContinuation = null
-        onCoroutineSuspend()
     }
 
     override fun handleDoResume(continuation: Continuation<*>, function: DoResumeForSuspend) {
-        Logger.default.debug { "handleDoResume for ${function.doResume}, ${function.suspend.method}" }
+        Logger.default.debug { "handleDoResumeEnter for ${function.doResume}, ${function.suspend.method}" }
         if (entryPoint == null) {
             entryPoint = CoroutineStackFrame(continuation,
                     FunctionCall(function.doResume.method, function.doResumeCallPosition ?: CallPosition.UNKNOWN))
@@ -85,8 +95,6 @@ class CoroutineStackImpl(override val context: CoroutineContext,
 
     fun prettyPrint() = "$context:\n" + //FIXME
             if (stack.isEmpty()) "<empty>"
-            else stack.first().prettyPrint() + " <- suspended here\n" +
-                    stack.drop(1).joinToString("\n") { it.prettyPrint() } +
-                    "\n--------------"
+            else stack.joinToString("\n") { it.prettyPrint() } + "\n--------------"
 
 }

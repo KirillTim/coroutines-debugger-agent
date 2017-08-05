@@ -1,7 +1,6 @@
 package kotlinx.coroutines.debug.agent
 
-import kotlinx.coroutines.debug.manager.LogLevel
-import kotlinx.coroutines.debug.manager.Logger
+import kotlinx.coroutines.debug.manager.*
 import kotlinx.coroutines.debug.transformer.CoroutinesDebugTransformer
 import java.lang.instrument.Instrumentation
 
@@ -16,6 +15,19 @@ class Agent {
             tryConfigureLogger(agentArgs)
             System.setProperty("kotlinx.coroutines.debug", "")
             //TODO: start server
+            StacksManager.addOnStackChangedCallback { stackChangedEvent, coroutineContext ->
+                if (stackChangedEvent is Updated || stackChangedEvent is Removed) {
+                    Logger.default.data {
+                        buildString {
+                            append("event: $stackChangedEvent for context $coroutineContext\n")
+                            for (stack in getStacks()) {
+                                append((stack as CoroutineStackImpl).prettyPrint())
+                                append("\n")
+                            }
+                        }
+                    }
+                }
+            }
             inst.addTransformer(CoroutinesDebugTransformer())
         }
     }

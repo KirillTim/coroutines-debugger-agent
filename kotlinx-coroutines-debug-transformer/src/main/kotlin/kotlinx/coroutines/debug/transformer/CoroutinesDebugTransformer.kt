@@ -46,6 +46,12 @@ private fun MethodNode.addSuspendCallHandlers(continuationVarIndex: Int, classNo
     }
 }
 
+private fun MethodNode.addDoResumeCallExitHandler(continuationVarIndex: Int, doResumeIndex: Int) { //FIXME: make more robust
+    val areturn = instructions.lastARETURN()
+            ?: throw IllegalArgumentException("DoResume call should have at least one ARETURN instruction")
+    instructions.insert(areturn.previous, generateHandleDoResumeCallExit(continuationVarIndex, doResumeIndex))
+}
+
 private fun MethodNode.transformMethod(classNode: ClassNode) {
     val isStateMachine = isStateMachineForAnonymousSuspendFunction()
     val isDoResume = isDoResume()
@@ -64,7 +70,10 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
         val doResumeFirstInsnPosition = CallPosition(classNode.sourceFile, firstInstructionLineNumber())
                 .takeIf { isStateMachine }
         doResumeToSuspendFunctions += DoResumeForSuspend(methodId, forFunction, doResumeFirstInsnPosition)
-        instructions.insert(generateHandleDoResumeCall(continuation, doResumeToSuspendFunctions.lastIndex))
+        instructions.insert(generateHandleDoResumeCallEnter(continuation, doResumeToSuspendFunctions.lastIndex))
+        if (isStateMachine) { //FIXME for now assume that only anonymous doResume can be entry point
+            addDoResumeCallExitHandler(continuation, doResumeToSuspendFunctions.lastIndex)
+        }
     }
 }
 
