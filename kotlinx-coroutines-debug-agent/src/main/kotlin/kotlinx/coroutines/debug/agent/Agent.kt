@@ -14,22 +14,19 @@ class Agent {
         @JvmStatic
         fun premain(agentArgs: String?, inst: Instrumentation) {
             tryConfigureLogger(agentArgs)
+            System.setProperty("kotlinx.coroutines.debug", "")
             //TODO: start server
-            //TODO setup `kotlinx.coroutines.debug` system property to true
             inst.addTransformer(CoroutinesDebugTransformer())
         }
     }
 }
 
 private fun tryConfigureLogger(agentArgs: String?) {
-    val args = agentArgs?.split(',')
-    try {
-        val logkv = args?.find { it.toLowerCase().startsWith("loglevel") }
-        if (logkv != null) {
-            val value = logkv.split('=')[1].toUpperCase()
-            Logger.default.level = LogLevel.valueOf(value)
-
-        }
-    } catch (ignore: Exception) {
+    val logLevel = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("loglevel=") } ?: return
+    val value = logLevel.split('=')[1]
+    if (!LogLevel.values().map { it.name }.contains(value.toUpperCase())) {
+        Logger.default.error { "Unknown log level '$value' in agent arguments" }
+        return
     }
+    Logger.default.level = LogLevel.valueOf(value.toUpperCase())
 }
