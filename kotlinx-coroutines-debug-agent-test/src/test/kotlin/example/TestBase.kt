@@ -1,23 +1,17 @@
 package example
 
 import com.sun.tools.attach.VirtualMachine
-import kotlinx.coroutines.debug.manager.StackChangedEvent
-import kotlinx.coroutines.debug.manager.StacksManager
 import org.junit.After
 import org.junit.Before
 import java.lang.management.ManagementFactory
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.coroutines.experimental.CoroutineContext
-
-data class ExpectedCall(val owner: String, val method: String, val file: String? = null, val line: Int? = null)
-
-fun expectStacks(stacks: List<List<ExpectedCall>>) { //FIXME map from context to stack
-
-}
 
 open class TestBase {
+
+    private val AGENT_JAR_PATH = "../kotlinx-coroutines-debug-agent/build/libs/coroutines-debug-agent.jar"
+    private val AGENT_ARGUMENTS = "loglevel=info,datafile=" //no data output
 
     private var actionIndex = AtomicInteger()
     private var finished = AtomicBoolean()
@@ -67,25 +61,13 @@ open class TestBase {
     @Before
     fun prepare() {
         loadAgent()
-        /*val clazz = Class.forName(StacksManager::class.java.name)
-        val myCallback = { manager: StacksManager, event: StackChangedEvent, ctx: CoroutineContext ->
-            println("my callback for $event")
-        }
-        StacksManager.addOnStackChangedCallback(myCallback)
-        val callbacks = clazz.getDeclaredField("changeCallbacks")!!
-        callbacks.isAccessible = true
-        val list = callbacks[null] as List<*>
-        println(list)
-        println(list.size)*/
-        //val callbacks = clazz.get
     }
 
     private fun loadAgent() {
         val nameOfRunningVM = ManagementFactory.getRuntimeMXBean().name
         val pid = nameOfRunningVM.substring(0, nameOfRunningVM.indexOf('@'))
-        val AGENT_JAR_PATH = "../build/libs/coroutines-debug-agent.jar"
         val vm = VirtualMachine.attach(pid)
-        vm.loadAgent(AGENT_JAR_PATH)
+        vm.loadAgent(AGENT_JAR_PATH, AGENT_ARGUMENTS)
         vm.detach()
     }
 

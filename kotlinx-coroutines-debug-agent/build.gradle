@@ -1,5 +1,38 @@
-dependencies {
-    compile project(':kotlinx-coroutines-debug-manager')
-    compile project(':kotlinx-coroutines-debug-transformer')
+plugins {
+    id "java"
+    id "com.github.johnrengelman.shadow" version "2.0.1"
 }
 
+dependencies {
+    compile project(":kotlinx-coroutines-debug-manager")
+    compile project(":kotlinx-coroutines-debug-transformer")
+}
+
+jar.enabled = false //prevent `build` task from empty jar creation
+
+tasks.build.dependsOn shadowJar
+
+shadowJar {
+    baseName = "coroutines-debug-agent"
+    classifier = null
+    version = null
+
+    configurations = [project.configurations.compile]
+
+    dependencies {
+        include dependency("org.ow2.asm:asm-all:.*")
+        include dependency(":kotlinx-coroutines-debug.*") //such a regexp, very wow!
+        exclude dependency("org.jetbrains.kotlin:kotlin-stdlib-jre8")
+    }
+
+    relocate "org.objectweb.asm", "kotlinx.coroutines.debug.org.objectweb.asm"
+}
+
+jar {
+    manifest {
+        attributes "Premain-Class": "kotlinx.coroutines.debug.agent.Agent"
+        attributes "Agent-Class": "kotlinx.coroutines.debug.agent.Agent"
+        attributes "Can-Redefine-Classes": true
+        attributes "Can-Retransform-Classes": true
+    }
+}

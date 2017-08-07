@@ -16,12 +16,8 @@ buildscript { //FIXME: change kotlin version (and repo)
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath "com.github.jengelman.gradle.plugins:shadow:2.0.1"
     }
 }
-
-apply plugin: "com.github.johnrengelman.shadow"
-apply plugin: "java"
 
 subprojects {
     apply plugin: "kotlin"
@@ -33,36 +29,4 @@ subprojects {
     sourceCompatibility = 1.8
     compileKotlin.kotlinOptions.jvmTarget = "1.8"
     compileTestKotlin.kotlinOptions.jvmTarget = "1.8"
-}
-
-dependencies {
-    compile project(":kotlinx-coroutines-debug-agent")
-}
-
-jar.enabled = false //prevent `build` task from empty jar creation
-
-tasks.build.doLast {
-    shadowJar.execute()
-}
-
-shadowJar {
-    baseName = "coroutines-debug-agent"
-    classifier = null
-    version = null
-
-    configurations = [project.configurations.compile]
-
-    dependencies {
-        include dependency("org.ow2.asm:asm-all:.*")
-        include dependency(":kotlinx-coroutines-debug.*") //such a regexp, very wow!
-        exclude dependency("org.jetbrains.kotlin:kotlin-stdlib-jre8")
-    }
-
-    relocate "org.objectweb.asm", "kotlinx.coroutines.debug.org.objectweb.asm"
-}
-
-jar {
-    manifest {
-        attributes "Premain-Class": "kotlinx.coroutines.debug.agent.Agent"
-    }
 }

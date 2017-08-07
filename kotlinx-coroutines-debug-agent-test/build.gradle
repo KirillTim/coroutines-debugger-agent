@@ -1,20 +1,14 @@
 dependencies {
     testCompile 'junit:junit:4.12'
-    testCompile project(":kotlinx-coroutines-debug-agent")
+    testCompile project(":kotlinx-coroutines-debug-manager")
     testCompile "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.17"
-    testCompile files("${System.properties.'java.home'}/../lib/tools.jar") //FIXME
+    testCompile files("${System.properties.'java.home'}/../lib/tools.jar")
 }
 
-task runTest(type: JavaExec, dependsOn: build) { //FIXME
-    classpath = sourceSets.test.runtimeClasspath // + files("${System.properties.'java.home'}/../lib/tools.jar") //FIXME
-    //classpath.getFiles().forEach { println(it) }
-    main = "example.AsyncAwait1Kt"
-    //main = "example.MainKt"
-    jvmArgs += ["-javaagent:../build/libs/coroutines-debug-agent.jar"]
-}
+test.dependsOn project(":kotlinx-coroutines-debug-agent").tasks.build
 
-kotlin {
-    experimental {
-        coroutines "enable"
-    }
-}
+/*test {
+    jvmArgs += ["-javaagent:../kotlinx-coroutines-debug-agent/build/libs/coroutines-debug-agent.jar=loglevel=debug"]
+}*/
+
+kotlin.experimental.coroutines "enable"
