@@ -12,9 +12,20 @@ class Agent {
     companion object {
         @JvmStatic
         fun premain(agentArgs: String?, inst: Instrumentation) {
+            agentSetup(agentArgs, inst)
+            Logger.default.info { "called Agent.premain($agentArgs, $inst)" }
+        }
+
+        @JvmStatic
+        fun agentmain(agentArgs: String?, inst: Instrumentation) {
+            agentSetup(agentArgs, inst)
+            Logger.default.info { "called Agent.agentmain($agentArgs, $inst)" }
+        }
+
+        private fun agentSetup(agentArgs: String?, inst: Instrumentation) {
             tryConfigureLogger(agentArgs)
             System.setProperty("kotlinx.coroutines.debug", "")
-            //TODO: start server
+            startServerIfNeeded(agentArgs)
             StacksManager.addOnStackChangedCallback { stackChangedEvent, coroutineContext ->
                 if (stackChangedEvent is Updated || stackChangedEvent is Removed) {
                     Logger.default.data {
@@ -31,6 +42,10 @@ class Agent {
             inst.addTransformer(CoroutinesDebugTransformer())
         }
     }
+}
+
+private fun startServerIfNeeded(agentArgs: String?) {
+    //TODO
 }
 
 private fun tryConfigureLogger(agentArgs: String?) {
