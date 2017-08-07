@@ -11,7 +11,7 @@ import kotlin.coroutines.experimental.intrinsics.COROUTINE_SUSPENDED
 
 val doResumeToSuspendFunctions = mutableListOf<DoResumeForSuspend>()
 
-val suspendCalls = mutableListOf<FunctionCall>()
+val suspendCalls = mutableListOf<FunctionCall>() //TODO concurrency
 
 sealed class StackChangedEvent
 class Created : StackChangedEvent()
@@ -81,7 +81,7 @@ object InstrumentedCodeEventsHandler {
     fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) {
         val suspended = result === COROUTINE_SUSPENDED
         val call = suspendCalls[functionCallIndex]
-        Logger.default.debug {
+        debug {
             "suspend call of ${call.function} at ${call.position.file}:${call.position.line} from ${call.fromFunction}, " +
                     "with ${continuation.hashCode()} : ${if (suspended) "suspended" else "result = $result"}"
         }
@@ -90,7 +90,7 @@ object InstrumentedCodeEventsHandler {
                 StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
             }
         } catch (e: Exception) {
-            Logger.default.error {
+            error {
                 "handleAfterSuspendCall($result, ${continuation.toStringSafe()}, ${call.function} " +
                         "at ${call.position.file}:${call.position.line}) exception: ${e.stackTraceToString()}"
             }
@@ -100,14 +100,14 @@ object InstrumentedCodeEventsHandler {
     @JvmStatic
     fun handleDoResumeEnter(continuation: Continuation<*>, doResumeIndex: Int) { //FIXME
         val function = doResumeToSuspendFunctions[doResumeIndex]
-        Logger.default.debug { "called doResume ($function) : cont: ${continuation.hashCode()}, context: ${continuation.context}" }
+        debug { "called doResume ($function) : cont: ${continuation.hashCode()}, context: ${continuation.context}" }
         StacksManager.handleDoResumeEnter(continuation, function)
     }
 
     @JvmStatic
     fun handleDoResumeExit(continuation: Continuation<*>, doResumeIndex: Int) { //FIXME
         val function = doResumeToSuspendFunctions[doResumeIndex]
-        Logger.default.debug { "exit from doResume ($function) : cont: ${continuation.hashCode()}, context: ${continuation.context}" }
+        debug { "exit from doResume ($function) : cont: ${continuation.hashCode()}, context: ${continuation.context}" }
         StacksManager.handleDoResumeExit(continuation, function)
     }
 }

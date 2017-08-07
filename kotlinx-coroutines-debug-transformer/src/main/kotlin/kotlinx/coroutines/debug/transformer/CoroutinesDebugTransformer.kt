@@ -33,7 +33,7 @@ private fun MethodNode.addSuspendCallHandlers(continuationVarIndex: Int, classNo
     val lines = methodCallLineNumber(instructions)
     for (i in instructions) {
         if (i is MethodInsnNode && i.isSuspend()) {
-            Logger.default.debug {
+            debug {
                 "instrument call ${i.owner}.${i.name}(${i.desc}) " +
                         "from ${classNode.name}.${name} at ${classNode.sourceFile}:${lines[i]}, " +
                         "cont index = $continuationVarIndex"
@@ -58,7 +58,7 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
     val isSuspend = isSuspend()
     if (!isSuspend && !isStateMachine && !isDoResume) return
     val continuation = findContinuationVarIndex(classNode)
-    //Logger.default.debug { ">>in method ${classNode.name}.${name} with description: ${desc}" }
+    //debug { ">>in method ${classNode.name}.${name} with description: ${desc}" }
     if (isSuspend || isStateMachine) {
         addSuspendCallHandlers(continuation, classNode)
     }
@@ -77,21 +77,23 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
     }
 }
 
+val THIS_PACKAGE_PREFIX = "kotlinx.coroutines.debug"
+
 class CoroutinesDebugTransformer : ClassFileTransformer {
     override fun transform(loader: ClassLoader?, className: String?, classBeingRedefined: Class<*>?,
                            protectionDomain: ProtectionDomain?, classfileBuffer: ByteArray?): ByteArray {
+        if (className?.startsWith(THIS_PACKAGE_PREFIX) == true && classfileBuffer != null) return classfileBuffer
         val reader = ClassReader(classfileBuffer)
         val classNode = ClassNode()
         reader.accept(classNode, 0)
-
         for (method in classNode.methods.map { it as MethodNode }) {
             try {
                 method.transformMethod(classNode)
             } catch (e: Exception) {
                 val message = "while instrumenting $className.${method.name} with desc: ${method.desc} " +
                         "exception : ${e.stackTraceToString()}"
-                Logger.default.error { message }
-                Logger.default.debug { message + "\nbyte code: ${classNode.byteCodeString()}" }
+                error { message }
+                debug { message + "\nbyte code: ${classNode.byteCodeString()}" }
             }
         }
         val writer = ClassWriter(ClassWriter.COMPUTE_MAXS)

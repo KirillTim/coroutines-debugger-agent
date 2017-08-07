@@ -2,6 +2,7 @@ package kotlinx.coroutines.debug.agent
 
 import kotlinx.coroutines.debug.manager.*
 import kotlinx.coroutines.debug.transformer.CoroutinesDebugTransformer
+import java.io.FileOutputStream
 import java.lang.instrument.Instrumentation
 
 /**
@@ -13,13 +14,13 @@ class Agent {
         @JvmStatic
         fun premain(agentArgs: String?, inst: Instrumentation) {
             agentSetup(agentArgs, inst)
-            Logger.default.info { "called Agent.premain($agentArgs, $inst)" }
+            info { "called Agent.premain($agentArgs, $inst)" }
         }
 
         @JvmStatic
         fun agentmain(agentArgs: String?, inst: Instrumentation) {
             agentSetup(agentArgs, inst)
-            Logger.default.info { "called Agent.agentmain($agentArgs, $inst)" }
+            info { "called Agent.agentmain($agentArgs, $inst)" }
         }
 
         private fun agentSetup(agentArgs: String?, inst: Instrumentation) {
@@ -28,7 +29,7 @@ class Agent {
             startServerIfNeeded(agentArgs)
             StacksManager.addOnStackChangedCallback { stackChangedEvent, coroutineContext ->
                 if (stackChangedEvent is Updated || stackChangedEvent is Removed) {
-                    Logger.default.data {
+                    data {
                         buildString {
                             append("event: $stackChangedEvent for context $coroutineContext\n")
                             for (stack in getStacks()) {
@@ -49,11 +50,32 @@ private fun startServerIfNeeded(agentArgs: String?) {
 }
 
 private fun tryConfigureLogger(agentArgs: String?) {
-    val logLevel = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("loglevel=") } ?: return
-    val value = logLevel.split('=')[1]
-    if (!LogLevel.values().map { it.name }.contains(value.toUpperCase())) {
-        Logger.default.error { "Unknown log level '$value' in agent arguments" }
-        return
+    val levelValue = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("loglevel=") }?.split('=')?.get(1)
+    val logLevel = levelValue?.let {
+        if (!LogLevel.values().map { it.name }.contains(levelValue.toUpperCase())) {
+            error { "Unknown log level '$levelValue' in agent arguments" }
+            LogLevel.INFO
+        } else LogLevel.valueOf(levelValue.toUpperCase())
+    } ?: LogLevel.INFO
+    val logFileValue = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("logfile=") }?.split('=')?.get(1)
+    val logFileOutputStream = logFileValue?.let { FileOutputStream(it) }
+    val dataFileValue = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("datafile=") }?.split('=')?.get(1)
+    val dataFileOutputStreams = listOfNotNull(//'datafile=' argument supress data output (data {...} )
+            if (dataFileValue == logFileValue) logFileOutputStream
+            else dataFileValue?.let {
+                try {
+                    FileOutputStream(it)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+    )
+    Logger.config = if (logFileOutputStream != null) {
+        logToFile(logLevel, logFileOutputStream = logFileOutputStream, dataConsumers = dataFileOutputStreams)
+    } else {
+        if (dataFileOutputStreams.isNotEmpty() || dataFileValue != null)
+            LoggerConfig(logLevel, dataConsumers = dataFileOutputStreams)
+        else LoggerConfig(logLevel)
     }
-    Logger.default.level = LogLevel.valueOf(value.toUpperCase())
 }
+

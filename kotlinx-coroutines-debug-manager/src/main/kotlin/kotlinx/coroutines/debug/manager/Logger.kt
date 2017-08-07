@@ -1,131 +1,87 @@
 package kotlinx.coroutines.debug.manager
 
-import java.io.File
 import java.io.FileOutputStream
-import java.io.PrintStream
+import java.io.OutputStream
+import java.io.PrintWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * @author Kirill Timofeev
+ */
+
+inline fun debug(msg: () -> Any?) = message(LogLevel.DEBUG, msg)
+
+inline fun info(msg: () -> Any?) = message(LogLevel.INFO, msg)
+inline fun error(msg: () -> Any?) = message(LogLevel.ERROR, msg)
+
+inline fun data(msg: () -> Any?) = Logger.config.doData(msg.toStringSafe())
 
 enum class LogLevel {
     DEBUG, INFO, ERROR
 }
 
-sealed class LogConsumer
-data class PrintStreamLogConsumer(val consumer: PrintStream) : LogConsumer()
-data class FileLogConsumer(val consumer: FileOutputStream) : LogConsumer()
-
-private interface LogConsumers {
-    fun addLogConsumer(logLevel: LogLevel, consumer: PrintStream): Boolean
-    fun addLogConsumer(logLevel: LogLevel, consumer: FileOutputStream): Boolean
-    fun removeLogConsumer(logLevel: LogLevel, consumer: PrintStream): Boolean
-    fun removeLogConsumer(logLevel: LogLevel, consumer: FileOutputStream): Boolean
-
+data class LogConsumer(val level: LogLevel, val consumerWriter: PrintWriter) {
+    constructor(level: LogLevel, consumerStream: OutputStream) : this(level, PrintWriter(consumerStream, true))
 }
 
-private interface DataConsumers {
-    fun addDataConsumer(consumer: PrintStream): Boolean
-    fun removeDataConsumer(consumer: PrintStream): Boolean
-
+fun logToFile(level: LogLevel, name: String = "", withTime: Boolean = false,
+              logFileOutputStream: FileOutputStream, dataConsumers: List<OutputStream> = emptyList()
+): LoggerConfig {
+    val logConsumer = LogConsumer(level, logFileOutputStream)
+    return LoggerConfig(level, name, withTime, listOf(logConsumer), dataConsumers)
 }
 
-class Logger(val name: String = "",
-             var level: LogLevel = LogLevel.INFO, //FIXME
-             val withTime: Boolean = false,
-             debugConsumers: MutableList<LogConsumer> = mutableListOf(PrintStreamLogConsumer(System.out)),
-             infoConsumers: MutableList<LogConsumer> = mutableListOf(PrintStreamLogConsumer(System.out)),
-             errorConsumers: MutableList<LogConsumer> = mutableListOf(PrintStreamLogConsumer(System.err)),
-             private val dataConsumers: HashSet<PrintStream> = hashSetOf(System.err)
-) : LogConsumers, DataConsumers {
-    private val logConsumers = mapOf<LogLevel, HashSet<LogConsumer>>(
-            LogLevel.DEBUG to debugConsumers.toHashSet(),
-            LogLevel.INFO to infoConsumers.toHashSet(),
-            LogLevel.ERROR to errorConsumers.toHashSet()
-    )
+class LoggerConfig(
+        val level: LogLevel,
+        val name: String = "",
+        val withTime: Boolean = false,
+        val consumers: List<LogConsumer> = listOf(LogConsumer(LogLevel.DEBUG, System.err)),
+        dataConsumers: List<OutputStream> = listOf(System.err)) {
+    val dataConsumers = dataConsumers.toHashSet().map { PrintWriter(it, true) }
+}
 
-    fun debug(msg: () -> Any?) = message(LogLevel.DEBUG, msg)
+object Logger {
+    @Volatile
+    var config: LoggerConfig = LoggerConfig(LogLevel.INFO)
+}
 
-    fun info(msg: () -> Any?) = message(LogLevel.INFO, msg)
-
-    fun error(msg: () -> Any?) = message(LogLevel.ERROR, msg)
-
-    fun data(msg: () -> Any?) {
-        val text = "${currentTimePretty()}:\n${msg.toStringSafe()}"
-        for (c in dataConsumers) {
-            c.println(text)
-            c.flush()
-        }
-    }
-
-    private inline fun message(withLevel: LogLevel, msg: () -> Any?) {
-        if (withLevel >= level) { //FIXME: can't flush all the data if writing from different levels to the same file
-            val text = "${withLevel.name} ${build(msg)}"
-            for (c in logConsumers[withLevel]!!) {
-                val pw = when (c) {
-                    is PrintStreamLogConsumer -> c.consumer
-                    is FileLogConsumer -> PrintStream(c.consumer)
-                }
-                pw.println(text)
-                pw.flush()
-                if (c is FileLogConsumer) {
-                    c.consumer.fd.sync()
-                }
-            }
-        }
-    }
-
-    override fun addLogConsumer(logLevel: LogLevel, consumer: PrintStream)
-            = logConsumers[logLevel]!!.add(PrintStreamLogConsumer(consumer))
-
-    override fun addLogConsumer(logLevel: LogLevel, consumer: FileOutputStream)
-            = logConsumers[logLevel]!!.add(FileLogConsumer(consumer))
-
-    override fun removeLogConsumer(logLevel: LogLevel, consumer: PrintStream)
-            = logConsumers[logLevel]!!.remove(PrintStreamLogConsumer(consumer))
-
-    override fun removeLogConsumer(logLevel: LogLevel, consumer: FileOutputStream)
-            = logConsumers[logLevel]!!.remove(FileLogConsumer(consumer))
-
-    override fun addDataConsumer(consumer: PrintStream)
-            = dataConsumers.add(consumer)
-
-    override fun removeDataConsumer(consumer: PrintStream)
-            = dataConsumers.remove(consumer)
-
-    private inline fun build(msg: () -> Any?)
-            = "${prefix()}: ${msg.toStringSafe()}"
-
-    private val namePrefix = if (name.isNotEmpty()) "$name:" else ""
-
-    private fun prefix()
-            = if (withTime) "[${currentTimePretty()}] " else "" + namePrefix
-
-    companion object {
-        val default = Logger()
-        fun logToFile(fileName: String,
-                      name: String = "",
-                      level: LogLevel = LogLevel.INFO,
-                      withTime: Boolean = false): Logger { //FIXME
-            val fos = File(fileName).outputStream()
-            val logger = Logger(name, level, withTime)
-            logger.removeLogConsumer(LogLevel.DEBUG, System.out)
-            logger.removeLogConsumer(LogLevel.INFO, System.out)
-            logger.removeLogConsumer(LogLevel.ERROR, System.err)
-            logger.addLogConsumer(LogLevel.DEBUG, fos)
-            logger.addLogConsumer(LogLevel.INFO, fos)
-            logger.addLogConsumer(LogLevel.ERROR, fos)
-            return logger
-        }
+inline fun message(withLevel: LogLevel, msg: () -> Any?) {
+    val config = Logger.config
+    if (withLevel >= config.level) {
+        config.doLog(withLevel, build(msg))
     }
 }
+
+@PublishedApi
+internal fun LoggerConfig.doData(msg: String) {
+    val text = "${currentTimePretty()}:\n$msg"
+    dataConsumers.forEach { it.println(text) }
+}
+
+@PublishedApi
+internal fun LoggerConfig.doLog(withLevel: LogLevel, msg: String) {
+    val text = "${withLevel.name} $msg"
+    consumers.filter { withLevel >= it.level }.forEach { it.consumerWriter.println(text) }
+}
+
+@PublishedApi
+internal inline fun build(msg: () -> Any?)
+        = "${prefix()}: ${msg.toStringSafe()}"
+
+@PublishedApi
+internal fun prefix()
+        = if (Logger.config.withTime) "[${currentTimePretty()}] " else "" +
+        if (Logger.config.name.isNotEmpty()) "${Logger.config.name}:" else ""
 
 @Suppress("NOTHING_TO_INLINE")
-private inline fun (() -> Any?).toStringSafe() =
+@PublishedApi
+internal inline fun (() -> Any?).toStringSafe() =
         try {
             invoke().toString()
         } catch (e: Exception) {
             "Log message invocation failed: $e"
         }
 
-private fun currentTimePretty(pattern: String = "dd.MM.yyyy HH:mm:ss.SSS")
+internal fun currentTimePretty(pattern: String = "dd.MM.yyyy HH:mm:ss.SSS")
         = SimpleDateFormat(pattern).format(Date(System.currentTimeMillis()))

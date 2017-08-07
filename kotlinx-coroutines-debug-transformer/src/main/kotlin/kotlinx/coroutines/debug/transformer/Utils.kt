@@ -55,13 +55,17 @@ internal fun AbstractInsnNode?.isASTORE() = this != null && opcode == Opcodes.AS
 internal fun AbstractInsnNode?.isALOAD(operand: Int? = null)
         = this != null && opcode == Opcodes.ALOAD && (operand == null || (this is VarInsnNode && `var` == operand))
 
+internal inline fun AbstractInsnNode?.nextMatches(pred: (AbstractInsnNode) -> Boolean)
+        = this?.nextMeaningful?.takeIf(pred)
+
 internal fun MethodNode.isStateMachineForAnonymousSuspendFunction()
         = isDoResume() &&
-        instructions[0].takeIf { it.isGetCOROUTINE_SUSPENDED }
-                ?.nextMeaningful.takeIf { it.isASTORE() }
-                ?.nextMeaningful.takeIf { it.isALOAD(0) }
-                ?.nextMeaningful.takeIf { it.isGetLabel }
-                ?.nextMeaningful is TableSwitchInsnNode
+        instructions[0]
+                .takeIf { it.isGetCOROUTINE_SUSPENDED }
+                .nextMatches { it.isASTORE() }
+                .nextMatches { it.isALOAD(0) }
+                .nextMatches { it.isGetLabel }
+                .nextMatches { it is TableSwitchInsnNode } != null
 
 internal fun InsnList.lastMeaningful()
         = if (last.isMeaningful) last else last.previousMeaningful

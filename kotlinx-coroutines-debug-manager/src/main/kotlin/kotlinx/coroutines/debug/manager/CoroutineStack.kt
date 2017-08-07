@@ -54,12 +54,12 @@ class CoroutineStackImpl(override val context: CoroutineContext) : CoroutineStac
     }
 
     private fun applyStack() {
-        Logger.default.debug {
+        debug {
             buildString {
                 append("stack applied\n")
                 append("topCurrentContinuation hash: ${topCurrentContinuation?.hashCode()}\n")
                 val (cont, call) = entryPoint!!
-                append("entry point: hash: ${cont.hashCode()}, func: ${call}\n")
+                append("entry point: hash: ${cont.hashCode()}, func: $call\n")
                 append("temp: ${temporaryStack.joinToString("\n", transform = { it.prettyPrint() })}\n")
                 append("stack: ${stack.joinToString("\n", transform = { it.prettyPrint() })}")
             }
@@ -70,13 +70,13 @@ class CoroutineStackImpl(override val context: CoroutineContext) : CoroutineStac
     }
 
     override fun handleDoResume(continuation: Continuation<*>, function: DoResumeForSuspend) {
-        Logger.default.debug { "handleDoResumeEnter for ${function.doResume}, ${function.suspend.method}" }
+        debug { "handleDoResumeEnter for ${function.doResume}, ${function.suspend.method}" }
         if (entryPoint == null) {
             entryPoint = CoroutineStackFrame(continuation,
                     FunctionCall(function.doResume.method, function.doResumeCallPosition ?: CallPosition.UNKNOWN))
             stack.add(entryPoint!!)
             topCurrentContinuation = continuation
-            Logger.default.debug { "entry point: ${entryPoint?.prettyPrint()}" }
+            debug { "entry point: ${entryPoint?.prettyPrint()}" }
             return
         }
         val currentTopFrame = if (function.doResume.method != function.suspend.method)
