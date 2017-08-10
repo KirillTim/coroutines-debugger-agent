@@ -1,6 +1,5 @@
 package kotlinx.coroutines.debug.transformer
 
-import kotlinx.coroutines.debug.manager.doResumeToSuspendFunctions
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.commons.InstructionAdapter
 import org.objectweb.asm.tree.AbstractInsnNode
@@ -21,7 +20,7 @@ private inline fun code(block: InstructionAdapter.() -> Unit): InsnList =
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleAfterSuspendCall] with continuation
- * and index of function call from [suspendCalls] list
+ * and index of function call from [kotlinx.coroutines.debug.manager.suspendCalls] list
  */
 fun generateAfterSuspendCall(continuationVarIndex: Int, functionCallIndex: Int) =
         code {
@@ -34,14 +33,14 @@ fun generateAfterSuspendCall(continuationVarIndex: Int, functionCallIndex: Int) 
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleDoResumeEnter] with continuation
- * and index of doResume function in [doResumeToSuspendFunctions] list
+ * and index of doResume function in [kotlinx.coroutines.debug.manager.doResumeToSuspendFunctions] list
  */
 fun generateHandleDoResumeCallEnter(continuationVarIndex: Int, doResumeIndex: Int)
         = generateContinuationAndIndexCall(continuationVarIndex, doResumeIndex, DO_RESUME_ENTER)
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleDoResumeExit] with continuation
- * and index of doResume function in [doResumeToSuspendFunctions] list
+ * and index of doResume function in [kotlinx.coroutines.debug.manager.doResumeToSuspendFunctions] list
  */
 fun generateHandleDoResumeCallExit(continuationVarIndex: Int, doResumeIndex: Int)
         = generateContinuationAndIndexCall(continuationVarIndex, doResumeIndex, DO_RESUME_EXIT)
