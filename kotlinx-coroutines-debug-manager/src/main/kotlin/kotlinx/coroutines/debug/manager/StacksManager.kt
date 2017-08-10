@@ -1,78 +1,113 @@
 package kotlinx.coroutines.debug.manager
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.concurrent.thread
 import kotlin.coroutines.experimental.Continuation
-import kotlin.coroutines.experimental.CoroutineContext
 import kotlin.coroutines.experimental.intrinsics.COROUTINE_SUSPENDED
 
 /**
  * @author Kirill Timofeev
  */
 
-val doResumeToSuspendFunctions = mutableListOf<DoResumeForSuspend>()
+val doResumeToSuspendFunctions = mutableListOf<DoResumeForSuspend>() //TODO concurrency
 
-val suspendCalls = mutableListOf<FunctionCall>() //TODO concurrency
+val suspendCalls = mutableListOf<MethodCall>() //TODO concurrency
 
 sealed class StackChangedEvent
-class Created : StackChangedEvent()
-sealed class Updated : StackChangedEvent()
-class Suspended : Updated()
-class WakedUp : Updated()
-class Removed : StackChangedEvent()
+object Created : StackChangedEvent() {
+    override fun toString() = "Created"
+}
 
-typealias OnStackChangedCallback = StacksManager.(StackChangedEvent, CoroutineContext) -> Unit
+sealed class Updated : StackChangedEvent()
+object Suspended : Updated() {
+    override fun toString() = "Suspended"
+}
+
+object WakedUp : Updated() {
+    override fun toString() = "WakedUp"
+}
+
+object Removed : StackChangedEvent() {
+    override fun toString() = "Removed"
+}
+
+typealias OnStackChangedCallback = StacksManager.(StackChangedEvent, WrappedContext) -> Unit
+
+data class StackWithEvent(val stack: CoroutineStack, val event: StackChangedEvent)
 
 object StacksManager {
-    private val stacks = ConcurrentHashMap<CoroutineContext, CoroutineStack>()
-    private val lastEvent = ConcurrentHashMap<CoroutineContext, StackChangedEvent>()
-    private val changeCallbacks = mutableListOf<OnStackChangedCallback>()
+    private val stacks = ConcurrentHashMap<WrappedContext, StackWithEvent>()
+    private val onChangeCallbacks = CopyOnWriteArrayList<OnStackChangedCallback>()
+    private val singletonContexts = ConcurrentHashMap<SingletonContext, Thread>()
 
-    fun getStacks() = stacks.values.toList()
+    fun addOnStackChangedCallback(callback: OnStackChangedCallback) = StacksManager.onChangeCallbacks.add(callback)
 
-    fun addOnStackChangedCallback(callback: OnStackChangedCallback)
-            = changeCallbacks.add(callback)
+    fun getSnapshot() = synchronized(this) {
+        //TODO: remove lock?
+        return@synchronized stacks.values.map { it.stack.getSnapshot() }.toList()
+    }
 
-    internal fun handleAfterSuspendFunctionReturn(continuation: Continuation<*>, functionCall: FunctionCall) {
-        val context = continuation.context //FIXME what to do with EmptyContext?
-        val (stack, _) = createStackIfNeeded(context) //FIXME which possible entry points do we have?
+    internal fun handleAfterSuspendFunctionReturn(continuation: Continuation<*>, functionCall: MethodCall) {
+        val currentThread = Thread.currentThread()
+        val wrappedContext =
+                if (continuation.context.isSingleton()) {
+                    requireNotNull(singletonContexts.iterator().asSequence().find { it.value == currentThread }?.key, {
+                        "can't find singleton context for continuation: ${continuation.hashCode()} " +
+                                "started on $currentThread"
+                    })
+                } else continuation.context.wrap()
+        val (stack, _) = stacks[wrappedContext]!!
         if (stack.handleSuspendFunctionReturn(continuation, functionCall)) {
-            lastEvent[context] = Suspended()
-            changeCallbacks.forEach { it.invoke(this, Suspended(), context) }
+            stacks[wrappedContext] = StackWithEvent(stack, Suspended)
+            fireCallbacks(Suspended, wrappedContext)
         }
     }
 
     internal fun handleDoResumeEnter(continuation: Continuation<*>, function: DoResumeForSuspend) {
-        val context = continuation.context
-        val (stack, created) = createStackIfNeeded(context)
-        stack.handleDoResume(continuation, function)
-        if (lastEvent[context] !is WakedUp) {
-            val event = if (created) Created() else WakedUp()
-            changeCallbacks.forEach { it.invoke(this, event, context) }
-            lastEvent[context] = event
+        val currentThread = Thread.currentThread()
+        val wrappedContext =
+                if (continuation.context.isSingleton()) {
+                    val current = findSingletonContext(continuation) ?: SingletonContext(continuation.context)
+                    singletonContexts[current] = currentThread
+                    current
+                } else continuation.context.wrap()
+        val previous = stacks.putIfAbsent(wrappedContext,
+                StackWithEvent(CoroutineStackImpl.create(continuation, function, currentThread), Created))
+        if (previous == null) {
+            fireCallbacks(Created, wrappedContext)
+            return
+        }
+        previous.stack.handleDoResume(continuation, function)
+        if (previous.event != WakedUp) {
+            stacks[wrappedContext] = previous.copy(event = WakedUp)
+            fireCallbacks(WakedUp, wrappedContext)
         }
     }
 
     internal fun handleDoResumeExit(continuation: Continuation<*>, func: DoResumeForSuspend) { //FIXME
-        val context = continuation.context
-        val stack = stacks[context]!!
-        if (stack.isEntryPoint(func.doResume.method)) {
-            stacks.remove(context)
-            lastEvent.remove(context)
-            changeCallbacks.forEach { it.invoke(this, Removed(), context) }
-        }
+        val wrappedContext = if (continuation.context.isSingleton())
+            requireNotNull(findSingletonContext(continuation),
+                    { "can't find singleton context for continuation: ${continuation.hashCode()}" })
+        else continuation.context.wrap()
+        stacks.remove(wrappedContext)
+        if (wrappedContext is SingletonContext)
+            singletonContexts.remove(wrappedContext)
+        fireCallbacks(Removed, wrappedContext)
     }
 
-    internal fun handleSuspendFunctionEnter(continuation: Continuation<*>, functionCall: FunctionCall) {
-        TODO("will make possible to show working(busy) coroutines")
+    private fun fireCallbacks(event: StackChangedEvent, context: WrappedContext) {
+        debug { "fireCallbacks($event, $context) (${onChangeCallbacks.size} listeners)" }
+        if (onChangeCallbacks.isEmpty()) return
+        //onChangeCallbacks.forEach { it.invoke(this, event, context) }
+        thread(true) { onChangeCallbacks.forEach { it.invoke(this, event, context) } }
     }
 
-    private fun createStackIfNeeded(context: CoroutineContext): Pair<CoroutineStack, Boolean> {
-        val stack = stacks[context]
-        if (stack != null) return Pair(stack, false)
-        val newStack = CoroutineStackImpl(context)
-        stacks[context] = newStack
-        return Pair(newStack, true)
-    }
+    private fun findSingletonContext(continuation: Continuation<*>) =
+            stacks.iterator().asSequence().find {
+                it.key.context.isSingleton() //speedup
+                        && (it.value.stack as CoroutineStackImpl).suspendedTopContinuation(continuation)
+            }?.key as? SingletonContext
 }
 
 //functions called from instrumented(user) code
@@ -82,7 +117,7 @@ object InstrumentedCodeEventsHandler {
         val suspended = result === COROUTINE_SUSPENDED
         val call = suspendCalls[functionCallIndex]
         debug {
-            "suspend call of ${call.function} at ${call.position.file}:${call.position.line} from ${call.fromFunction}, " +
+            "suspend call of ${call.method} at ${call.position.file}:${call.position.line} from ${call.fromMethod}, " +
                     "with ${continuation.hashCode()} : ${if (suspended) "suspended" else "result = $result"}"
         }
         try {
@@ -91,7 +126,7 @@ object InstrumentedCodeEventsHandler {
             }
         } catch (e: Exception) {
             error {
-                "handleAfterSuspendCall($result, ${continuation.toStringSafe()}, ${call.function} " +
+                "handleAfterSuspendCall($result, ${continuation.toStringSafe()}, ${call.method} " +
                         "at ${call.position.file}:${call.position.line}) exception: ${e.stackTraceToString()}"
             }
         }

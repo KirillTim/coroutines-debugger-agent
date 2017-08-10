@@ -10,8 +10,12 @@ data class MethodInfo(
         val isDoResume: Boolean = false,
         val isStateMachine: Boolean = false)
 
-data class MethodId(val name: String, val owner: String, val desc: String) {
+data class MethodId private constructor(val name: String, val owner: String, val desc: String) {
     override fun toString() = "$owner.$name $desc"
+
+    companion object {
+        fun build(name: String, owner: String, desc: String) = MethodId(name, owner.replace('/', '.'), desc)
+    }
 }
 
 data class MethodIdWithInfo(val method: MethodId, val info: MethodInfo, private val pretty: String = "") {
@@ -27,10 +31,14 @@ data class CallPosition(val file: String, val line: Int) {
 data class DoResumeForSuspend(
         val doResume: MethodIdWithInfo,
         val suspend: SuspendFunction,
-        val doResumeCallPosition: CallPosition? = null)
+        val doResumeCallPosition: CallPosition? = null) {
+    val doResumeForItself = doResume.method == suspend.method
+}
 
-data class FunctionCall(val function: MethodId, val position: CallPosition, val fromFunction: MethodId? = null) {
-    override fun toString() = "$function at ${position.file}:${position.line}"
+data class MethodCall(val method: MethodId, val position: CallPosition, val fromMethod: MethodId? = null) {
+    override fun toString() = "$method at ${position.file}:${position.line}"
+
+    val stackTraceElement by lazy { StackTraceElement(method.owner, method.name, position.file, position.line) }
 }
 
 sealed class SuspendFunction(open val method: MethodId)
@@ -38,5 +46,3 @@ sealed class SuspendFunction(open val method: MethodId)
 data class AnonymousSuspendFunction(override val method: MethodId) : SuspendFunction(method)
 
 data class NamedSuspendFunction(override val method: MethodId) : SuspendFunction(method)
-
-data class UnknownBodySuspendFunction(override val method: MethodId) : SuspendFunction(method)

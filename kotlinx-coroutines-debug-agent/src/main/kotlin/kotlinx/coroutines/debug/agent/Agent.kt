@@ -27,15 +27,13 @@ class Agent {
             tryConfigureLogger(agentArgs)
             System.setProperty("kotlinx.coroutines.debug", "")
             startServerIfNeeded(agentArgs)
-            StacksManager.addOnStackChangedCallback { stackChangedEvent, coroutineContext ->
-                if (stackChangedEvent is Updated || stackChangedEvent is Removed) {
+            if (Logger.config.dataConsumers.isNotEmpty()) {
+                StacksManager.addOnStackChangedCallback { stackChangedEvent, coroutineContext ->
                     data {
                         buildString {
                             append("event: $stackChangedEvent for context $coroutineContext\n")
-                            for (stack in getStacks()) {
-                                append((stack as CoroutineStackImpl).prettyPrint())
-                                append("\n")
-                            }
+                            append("snapshot:\n")
+                            getSnapshot().forEach { append("${it.coroutineInfo}\n") }
                         }
                     }
                 }

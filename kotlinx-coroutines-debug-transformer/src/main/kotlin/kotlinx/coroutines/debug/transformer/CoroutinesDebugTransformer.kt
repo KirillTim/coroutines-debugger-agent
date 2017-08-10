@@ -38,7 +38,7 @@ private fun MethodNode.addSuspendCallHandlers(continuationVarIndex: Int, classNo
                         "from ${classNode.name}.${name} at ${classNode.sourceFile}:${lines[i]}, " +
                         "cont index = $continuationVarIndex"
             }
-            suspendCalls += FunctionCall(i.buildMethodId(),
+            suspendCalls += MethodCall(i.buildMethodId(),
                     CallPosition(classNode.sourceFile, lines[i] ?: -1),
                     buildMethodId(classNode))
             instructions.insert(i, generateAfterSuspendCall(continuationVarIndex, suspendCalls.lastIndex))
@@ -54,7 +54,6 @@ private fun MethodNode.addDoResumeCallExitHandler(continuationVarIndex: Int, doR
 
 private fun MethodNode.transformMethod(classNode: ClassNode) {
     val isStateMachine = isStateMachineForAnonymousSuspendFunction()
-    val isDoResume = isDoResume()
     val isSuspend = isSuspend()
     if (!isSuspend && !isStateMachine && !isDoResume) return
     val continuation = findContinuationVarIndex(classNode)
@@ -65,7 +64,7 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
     if (isDoResume) {
         val methodId = buildMethodIdWithInfo(classNode)
         val forFunction = if (isStateMachine)
-            AnonymousSuspendFunction(MethodId(name, classNode.name, desc)) else
+            AnonymousSuspendFunction(MethodId.build(name, classNode.name, desc)) else
             correspondingSuspendFunctionForDoResume()
         val doResumeFirstInsnPosition = CallPosition(classNode.sourceFile, firstInstructionLineNumber())
                 .takeIf { isStateMachine }
