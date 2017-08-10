@@ -55,20 +55,18 @@ internal fun AbstractInsnNode?.isASTORE() = this != null && opcode == Opcodes.AS
 internal fun AbstractInsnNode?.isALOAD(operand: Int? = null)
         = this != null && opcode == Opcodes.ALOAD && (operand == null || (this is VarInsnNode && `var` == operand))
 
-internal inline fun AbstractInsnNode?.nextMatches(pred: (AbstractInsnNode) -> Boolean)
-        = this?.nextMeaningful?.takeIf(pred)
+internal inline fun AbstractInsnNode?.nextMatches(pred: (AbstractInsnNode) -> Boolean) =
+        this?.nextMeaningful?.takeIf(pred)
 
-internal fun MethodNode.isStateMachineForAnonymousSuspendFunction()
-        = isDoResume() &&
-        instructions[0]
+internal fun MethodNode.isStateMachineForAnonymousSuspendFunction() =
+        isDoResume && instructions[0]
                 .takeIf { it.isGetCOROUTINE_SUSPENDED }
                 .nextMatches { it.isASTORE() }
                 .nextMatches { it.isALOAD(0) }
                 .nextMatches { it.isGetLabel }
                 .nextMatches { it is TableSwitchInsnNode } != null
 
-internal fun InsnList.lastMeaningful()
-        = if (last.isMeaningful) last else last.previousMeaningful
+internal fun InsnList.lastMeaningful() = if (last.isMeaningful) last else last.previousMeaningful
 
 internal fun InsnList.lastARETURN(): AbstractInsnNode? {
     var cur = lastMeaningful()
@@ -78,19 +76,19 @@ internal fun InsnList.lastARETURN(): AbstractInsnNode? {
 }
 
 internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFunction {
-    require(isDoResume()) { "${name} should be doResume functionCall" }
+    require(isDoResume) { "${name} should be doResume functionCall" }
     val last = instructions.lastMeaningful()
     require(last.isARETURN) { "last meaningful instruction must be areturn" }
-    val suspendFunCall = last?.previousMeaningful as? MethodInsnNode
-    require(suspendFunCall?.opcode == Opcodes.INVOKESTATIC) { "can't find corresponding suspend function call" }
-    return NamedSuspendFunction(MethodId(suspendFunCall!!.name, suspendFunCall.owner, suspendFunCall.desc))
+    val suspendFunCall = requireNotNull(last?.previousMeaningful as? MethodInsnNode,
+            { "can't find corresponding suspend method call" })
+    return NamedSuspendFunction(MethodId.build(suspendFunCall.name, suspendFunCall.owner, suspendFunCall.desc))
 }
 
-internal fun Type.isResumeMethodDesc() =
-        returnType == OBJECT_TYPE && argumentTypes.contentEquals(arrayOf(OBJECT_TYPE, THROWABLE_TYPE))
+internal val Type.isResumeMethodDesc: Boolean
+    get() = returnType == OBJECT_TYPE && argumentTypes.contentEquals(arrayOf(OBJECT_TYPE, THROWABLE_TYPE))
 
-internal fun MethodNode.isDoResume() = name == "doResume"
-        && Type.getType(desc).isResumeMethodDesc() && (access and Opcodes.ACC_ABSTRACT == 0)
+internal val MethodNode.isDoResume: Boolean
+    get() = name == "doResume" && Type.getType(desc).isResumeMethodDesc && (access and Opcodes.ACC_ABSTRACT == 0)
 
 internal fun MethodNode.isSuspend() = isSuspend(name, desc)
 
@@ -113,15 +111,13 @@ private fun prettyPrint(method: MethodId, argumentValues: List<Any>? = null): St
     return "${method.owner.replace('/', '.')}.${method.name}($arguments): $returnType"
 }
 
-internal fun MethodInsnNode.buildMethodId()
-        = MethodId(name, owner, desc)
+internal fun MethodInsnNode.buildMethodId() = MethodId.build(name, owner, desc)
 
-internal fun MethodNode.buildMethodId(classNode: ClassNode)
-        = MethodId(name, classNode.name, desc)
+internal fun MethodNode.buildMethodId(classNode: ClassNode) = MethodId.build(name, classNode.name, desc)
 
 internal fun MethodNode.buildMethodIdWithInfo(classNode: ClassNode): MethodIdWithInfo {
     val isSMForAnonymous = isStateMachineForAnonymousSuspendFunction() //FIXME how to determine is anonymous or not?
-    val info = MethodInfo(isSMForAnonymous, isSuspend(), isDoResume(), isSMForAnonymous)
+    val info = MethodInfo(isSMForAnonymous, isSuspend(), isDoResume, isSMForAnonymous)
     val methodId = buildMethodId(classNode)
     return MethodIdWithInfo(methodId, info, prettyPrint(methodId))
 }
@@ -148,8 +144,8 @@ private fun methodCallNodeToLabelNode(instructions: InsnList): Map<MethodInsnNod
     return map
 }
 
-private fun labelNodeToLineNumber(instructions: InsnList)
-        = instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.start to it.line }.toMap()
+private fun labelNodeToLineNumber(instructions: InsnList) =
+        instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.start to it.line }.toMap()
 
 /*
 * It is possible not to have line number before method call (e.g: inside synthetic bridge)
