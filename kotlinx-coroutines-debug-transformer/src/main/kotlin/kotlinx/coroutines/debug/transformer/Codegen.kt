@@ -10,13 +10,22 @@ import org.objectweb.asm.tree.MethodNode
  * @author Kirill Timofeev
  */
 
+private val COMPLETION_WRAPPER_CLASS_NAME = "kotlinx/coroutines/debug/manager/WrappedCompletion"
+private val WRAP_COMPLETION = "maybeWrapCompletionAndCreateNewCoroutine"
 private val MANAGER_CLASS_NAME = "kotlinx/coroutines/debug/manager/InstrumentedCodeEventsHandler"
 private val AFTER_SUSPEND_CALL = "handleAfterSuspendCall"
 private val DO_RESUME_ENTER = "handleDoResumeEnter"
-private val DO_RESUME_EXIT = "handleDoResumeExit"
 
 private inline fun code(block: InstructionAdapter.() -> Unit): InsnList =
         MethodNode().apply { block(InstructionAdapter(this)) }.instructions
+
+fun generateNewWrappedCompletion(completionIndex: Int) =
+        code {
+            load(completionIndex, CONTINUATION_TYPE)
+            visitMethodInsn(Opcodes.INVOKESTATIC, COMPLETION_WRAPPER_CLASS_NAME, WRAP_COMPLETION,
+                    "(${CONTINUATION_TYPE.descriptor})${CONTINUATION_TYPE.descriptor}", false)
+            store(completionIndex, CONTINUATION_TYPE)
+        }
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleAfterSuspendCall] with continuation
@@ -35,22 +44,14 @@ fun generateAfterSuspendCall(continuationVarIndex: Int, functionCallIndex: Int) 
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleDoResumeEnter] with continuation
  * and index of doResume function in [kotlinx.coroutines.debug.manager.doResumeToSuspendFunctions] list
  */
-fun generateHandleDoResumeCallEnter(continuationVarIndex: Int, doResumeIndex: Int)
-        = generateContinuationAndIndexCall(continuationVarIndex, doResumeIndex, DO_RESUME_ENTER)
-
-/**
- * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleDoResumeExit] with continuation
- * and index of doResume function in [kotlinx.coroutines.debug.manager.doResumeToSuspendFunctions] list
- */
-fun generateHandleDoResumeCallExit(continuationVarIndex: Int, doResumeIndex: Int)
-        = generateContinuationAndIndexCall(continuationVarIndex, doResumeIndex, DO_RESUME_EXIT)
-
-private fun generateContinuationAndIndexCall(continuationVarIndex: Int, index: Int, methodToCall: String) =
+fun generateHandleDoResumeCallEnter(continuationVarIndex: Int, doResumeIndex: Int) =
         code {
+            load(0, COROUTINE_IMPL_TYPE)
+            getfield(COROUTINE_IMPL_TYPE.descriptor, "completion", CONTINUATION_TYPE.descriptor)
             load(continuationVarIndex, CONTINUATION_TYPE)
-            aconst(index)
-            visitMethodInsn(Opcodes.INVOKESTATIC, MANAGER_CLASS_NAME, methodToCall,
-                    "(${CONTINUATION_TYPE.descriptor}I)V", false)
+            aconst(doResumeIndex)
+            visitMethodInsn(Opcodes.INVOKESTATIC, MANAGER_CLASS_NAME, DO_RESUME_ENTER,
+                    "(${CONTINUATION_TYPE.descriptor}${CONTINUATION_TYPE.descriptor}I)V", false)
         }
 
 fun insertPrintln(text: String, instructions: InsnList, insertAfter: AbstractInsnNode? = null) {

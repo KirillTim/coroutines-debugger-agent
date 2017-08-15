@@ -33,7 +33,7 @@ class Agent {
                         buildString {
                             append("event: $stackChangedEvent for context $coroutineContext\n")
                             append("snapshot:\n")
-                            getSnapshot().forEach { append("${it.coroutineInfo}\n") }
+                            getSnapshot().forEach { append("${it.coroutineInfo(suspendCalls, doResumeToSuspendFunctions)}\n") }
                         }
                     }
                 }
@@ -69,10 +69,10 @@ private fun tryConfigureLogger(agentArgs: String?) {
             }
     )
     Logger.config = if (logFileOutputStream != null) {
-        logToFile(logLevel, logFileOutputStream = logFileOutputStream, dataConsumers = dataFileOutputStreams)
+        logToFile(logLevel, withTime = true, logFileOutputStream = logFileOutputStream, dataConsumers = dataFileOutputStreams)
     } else {
         if (dataFileOutputStreams.isNotEmpty() || dataFileValue != null)
-            LoggerConfig(logLevel, dataConsumers = dataFileOutputStreams)
+            LoggerConfig(logLevel, withTime = true, dataConsumers = dataFileOutputStreams)
         else LoggerConfig(logLevel)
     }
 }

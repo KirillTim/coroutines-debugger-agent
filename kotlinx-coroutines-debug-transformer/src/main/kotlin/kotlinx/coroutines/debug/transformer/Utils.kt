@@ -23,8 +23,11 @@ internal val AbstractInsnNode?.isGetCOROUTINE_SUSPENDED: Boolean
             && owner == "kotlin/coroutines/experimental/intrinsics/IntrinsicsKt"
             && desc == "()${OBJECT_TYPE.descriptor}"
 
+internal val AbstractInsnNode?.isSetLabel: Boolean
+    get() = this is FieldInsnNode && (opcode == Opcodes.PUTSTATIC || opcode == Opcodes.PUTFIELD) && name == "label"
+
 internal val AbstractInsnNode?.isGetLabel: Boolean
-    get() = this is FieldInsnNode && name == "label"
+    get() = this is FieldInsnNode && (opcode == Opcodes.GETFIELD || opcode == Opcodes.GETFIELD) && name == "label"
 
 internal val AbstractInsnNode?.isARETURN: Boolean
     get() = this != null && opcode == Opcodes.ARETURN
@@ -52,19 +55,24 @@ internal val AbstractInsnNode.previousMeaningful: AbstractInsnNode?
     }
 
 internal fun AbstractInsnNode?.isASTORE() = this != null && opcode == Opcodes.ASTORE
-internal fun AbstractInsnNode?.isALOAD(operand: Int? = null)
-        = this != null && opcode == Opcodes.ALOAD && (operand == null || (this is VarInsnNode && `var` == operand))
+internal fun AbstractInsnNode?.isALOAD(operand: Int? = null) =
+        this != null && opcode == Opcodes.ALOAD && (operand == null || (this is VarInsnNode && `var` == operand))
 
-internal inline fun AbstractInsnNode?.nextMatches(pred: (AbstractInsnNode) -> Boolean) =
-        this?.nextMeaningful?.takeIf(pred)
+internal inline fun AbstractInsnNode?.nextMatches(predicate: (AbstractInsnNode) -> Boolean) =
+        this?.nextMeaningful?.takeIf(predicate)
 
-internal fun MethodNode.isStateMachineForAnonymousSuspendFunction() =
-        isDoResume && instructions[0]
-                .takeIf { it.isGetCOROUTINE_SUSPENDED }
-                .nextMatches { it.isASTORE() }
-                .nextMatches { it.isALOAD(0) }
+internal inline fun AbstractInsnNode?.previousMatches(predicate: (AbstractInsnNode) -> Boolean) =
+        this?.previousMeaningful?.takeIf(predicate)
+
+internal fun AbstractInsnNode?.isStateMachineStartsHere() = //TODO check variable types and indexes
+        isGetCOROUTINE_SUSPENDED
+                && nextMatches { it.isASTORE() }
+                .nextMatches { it.isALOAD() }
                 .nextMatches { it.isGetLabel }
                 .nextMatches { it is TableSwitchInsnNode } != null
+
+internal fun MethodNode.isStateMachineForAnonymousSuspendFunction() =
+        isDoResume && instructions[0].isStateMachineStartsHere()
 
 internal fun InsnList.lastMeaningful() = if (last.isMeaningful) last else last.previousMeaningful
 
@@ -75,8 +83,11 @@ internal fun InsnList.lastARETURN(): AbstractInsnNode? {
     return cur
 }
 
+internal val InsnList.sequence: Sequence<AbstractInsnNode>
+    get() = iterator().asSequence().filterIsInstance<AbstractInsnNode>()
+
 internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFunction {
-    require(isDoResume) { "${name} should be doResume functionCall" }
+    require(isDoResume) { "$name should be doResume functionCall" }
     val last = instructions.lastMeaningful()
     require(last.isARETURN) { "last meaningful instruction must be areturn" }
     val suspendFunCall = requireNotNull(last?.previousMeaningful as? MethodInsnNode,
@@ -87,8 +98,21 @@ internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFuncti
 internal val Type.isResumeMethodDesc: Boolean
     get() = returnType == OBJECT_TYPE && argumentTypes.contentEquals(arrayOf(OBJECT_TYPE, THROWABLE_TYPE))
 
+internal val MethodNode.isAbstract: Boolean
+    get() = access and Opcodes.ACC_ABSTRACT != 0
+
+internal val MethodNode.isBridge: Boolean
+    get() = access and Opcodes.ACC_BRIDGE != 0
+
 internal val MethodNode.isDoResume: Boolean
-    get() = name == "doResume" && Type.getType(desc).isResumeMethodDesc && (access and Opcodes.ACC_ABSTRACT == 0)
+    get() = name == "doResume" && Type.getType(desc).isResumeMethodDesc && !isAbstract
+
+internal val Type.isCreateCoroutineMethodDesc: Boolean
+    get() = returnType == CONTINUATION_TYPE && argumentTypes.isNotEmpty() && argumentTypes.last() == CONTINUATION_TYPE
+
+internal fun MethodNode.isCreateCoroutine(owner: ClassNode) =
+        name == "create" && owner.name != COROUTINE_IMPL_TYPE.internalName //FIXME: handle create that now is bridge
+                && Type.getType(desc).isCreateCoroutineMethodDesc && !isBridge && !isAbstract
 
 internal fun MethodNode.isSuspend() = isSuspend(name, desc)
 
@@ -123,7 +147,7 @@ internal fun MethodNode.buildMethodIdWithInfo(classNode: ClassNode): MethodIdWit
 }
 
 internal fun MethodNode.firstInstructionLineNumber() = //FIXME
-        instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.line }.min() ?: -1
+        instructions.sequence.filterIsInstance<LineNumberNode>().map { it.line }.min() ?: -1
 
 internal fun ClassNode.byteCodeString(): String {
     val writer = StringWriter()
@@ -131,10 +155,10 @@ internal fun ClassNode.byteCodeString(): String {
     return writer.toString()
 }
 
-private fun methodCallNodeToLabelNode(instructions: InsnList): Map<MethodInsnNode, LabelNode> {
+private fun InsnList.methodCallNodeToLabelNode(): Map<MethodInsnNode, LabelNode> {
     val map = mutableMapOf<MethodInsnNode, LabelNode>()
     var lastLabel: LabelNode? = null
-    for (inst in instructions) {
+    for (inst in this) {
         if (inst is MethodInsnNode && lastLabel != null) {
             map[inst] = lastLabel
         } else if (inst is LabelNode) {
@@ -144,14 +168,14 @@ private fun methodCallNodeToLabelNode(instructions: InsnList): Map<MethodInsnNod
     return map
 }
 
-private fun labelNodeToLineNumber(instructions: InsnList) =
-        instructions.iterator().asSequence().filterIsInstance<LineNumberNode>().map { it.start to it.line }.toMap()
+private fun InsnList.labelNodeToLineNumber() =
+        sequence.filterIsInstance<LineNumberNode>().map { it.start to it.line }.toMap()
 
 /*
 * It is possible not to have line number before method call (e.g: inside synthetic bridge)
 * */
-internal fun methodCallLineNumber(instructions: InsnList): Map<MethodInsnNode, Int?> {
-    val methodToLabel = methodCallNodeToLabelNode(instructions)
-    val labelToLineNumber = labelNodeToLineNumber(instructions)
+internal fun InsnList.methodCallLineNumber(): Map<MethodInsnNode, Int?> {
+    val methodToLabel = methodCallNodeToLabelNode()
+    val labelToLineNumber = labelNodeToLineNumber()
     return methodToLabel.map { it.key to labelToLineNumber[it.value] }.toMap()
 }

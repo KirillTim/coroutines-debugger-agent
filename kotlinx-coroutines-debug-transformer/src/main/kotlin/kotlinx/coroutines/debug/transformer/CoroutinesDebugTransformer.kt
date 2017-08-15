@@ -15,14 +15,14 @@ import java.security.ProtectionDomain
  * @author Kirill Timofeev
  */
 
-private fun ClassNode.isCoroutineImplOrSubType()  //FIXME should we really check the type?
-        = name == COROUTINE_IMPL_TYPE.internalName || superName == COROUTINE_IMPL_TYPE.internalName
+private fun ClassNode.isCoroutineImplOrSubType() =
+        name == COROUTINE_IMPL_TYPE.internalName || superName == COROUTINE_IMPL_TYPE.internalName
 
-private fun argumentVarIndex(argumentTypes: Array<Type>, argumentIndex: Int)
-        = argumentTypes.take(argumentIndex).map { it.size }.sum()
+private fun argumentVarIndex(argumentTypes: Array<Type>, argumentIndex: Int) =
+        argumentTypes.take(argumentIndex).map { it.size }.sum()
 
 private fun MethodNode.findContinuationVarIndex(classNode: ClassNode): Int {
-    if (classNode.isCoroutineImplOrSubType()) return 0 //index of `this` variable
+    if (classNode.isCoroutineImplOrSubType()) return 0 //index of `this`
     require(isSuspend(), { "Method should be suspend, got $desc instead" })
     val continuationArgIndex = Type.getType(desc).argumentTypes.size - continuationOffsetFromEndInDesc(name)
     val isStatic = access and Opcodes.ACC_STATIC != 0
@@ -30,14 +30,14 @@ private fun MethodNode.findContinuationVarIndex(classNode: ClassNode): Int {
 }
 
 private fun MethodNode.addSuspendCallHandlers(continuationVarIndex: Int, classNode: ClassNode) {
-    val lines = methodCallLineNumber(instructions)
+    val lines = instructions.methodCallLineNumber()
     for (i in instructions) {
         if (i is MethodInsnNode && i.isSuspend()) {
-            debug {
-                "instrument call ${i.owner}.${i.name}(${i.desc}) " +
-                        "from ${classNode.name}.${name} at ${classNode.sourceFile}:${lines[i]}, " +
+            /*debug {
+                "instrument call ${i.owner}.${i.event}(${i.desc}) " +
+                        "from ${classNode.event}.${event} at ${classNode.sourceFile}:${lines[i]}, " +
                         "cont index = $continuationVarIndex"
-            }
+            }*/
             suspendCalls += MethodCall(i.buildMethodId(),
                     CallPosition(classNode.sourceFile, lines[i] ?: -1),
                     buildMethodId(classNode))
@@ -46,42 +46,45 @@ private fun MethodNode.addSuspendCallHandlers(continuationVarIndex: Int, classNo
     }
 }
 
-private fun MethodNode.addDoResumeCallExitHandler(continuationVarIndex: Int, doResumeIndex: Int) { //FIXME: make more robust
-    val areturn = instructions.lastARETURN()
-            ?: throw IllegalArgumentException("DoResume call should have at least one ARETURN instruction")
-    instructions.insert(areturn.previous, generateHandleDoResumeCallExit(continuationVarIndex, doResumeIndex))
+private fun MethodNode.transformCreate() {
+    val completion = Type.getType(desc).argumentTypes.lastIndex + 1
+    debug { "create type: $desc, completion: $completion" }
+    var newInsn = instructions.first
+    while (newInsn.opcode != Opcodes.NEW)
+        newInsn = newInsn?.nextMeaningful
+    instructions.insertBefore(newInsn, generateNewWrappedCompletion(completion))
 }
 
 private fun MethodNode.transformMethod(classNode: ClassNode) {
-    val isStateMachine = isStateMachineForAnonymousSuspendFunction()
-    val isSuspend = isSuspend()
-    if (!isSuspend && !isStateMachine && !isDoResume) return
+    if (isCreateCoroutine(classNode)) {
+        transformCreate()
+        return
+    }
+    if (!isSuspend() && !isDoResume) return
     val continuation = findContinuationVarIndex(classNode)
-    //debug { ">>in method ${classNode.name}.${name} with description: ${desc}" }
-    if (isSuspend || isStateMachine) {
-        addSuspendCallHandlers(continuation, classNode)
+    val isAnonymous = isStateMachineForAnonymousSuspendFunction()
+    debug {
+        ">>in method ${classNode.name}.${name} with description: ${desc}, " +
+                "cont: $continuation, isAnonymous: $isAnonymous"
     }
     if (isDoResume) {
         val methodId = buildMethodIdWithInfo(classNode)
-        val forFunction = if (isStateMachine)
+        val forFunction = if (isAnonymous)
             AnonymousSuspendFunction(MethodId.build(name, classNode.name, desc)) else
             correspondingSuspendFunctionForDoResume()
         val doResumeFirstInsnPosition = CallPosition(classNode.sourceFile, firstInstructionLineNumber())
-                .takeIf { isStateMachine }
+                .takeIf { isAnonymous }
         doResumeToSuspendFunctions += DoResumeForSuspend(methodId, forFunction, doResumeFirstInsnPosition)
         instructions.insert(generateHandleDoResumeCallEnter(continuation, doResumeToSuspendFunctions.lastIndex))
-        if (isStateMachine) { //FIXME for now assume that only anonymous doResume can be entry point
-            addDoResumeCallExitHandler(continuation, doResumeToSuspendFunctions.lastIndex)
-        }
+        if (!isAnonymous) return
     }
+    addSuspendCallHandlers(continuation, classNode)
 }
-
-val THIS_PACKAGE_PREFIX = "kotlinx.coroutines.debug"
 
 class CoroutinesDebugTransformer : ClassFileTransformer {
     override fun transform(loader: ClassLoader?, className: String?, classBeingRedefined: Class<*>?,
                            protectionDomain: ProtectionDomain?, classfileBuffer: ByteArray?): ByteArray {
-        if (className?.startsWith(THIS_PACKAGE_PREFIX) == true && classfileBuffer != null) return classfileBuffer
+        if (className?.startsWith(DEBUG_AGENT_PACKAGE_PREFIX) == true && classfileBuffer != null) return classfileBuffer
         val reader = ClassReader(classfileBuffer)
         val classNode = ClassNode()
         reader.accept(classNode, 0)
