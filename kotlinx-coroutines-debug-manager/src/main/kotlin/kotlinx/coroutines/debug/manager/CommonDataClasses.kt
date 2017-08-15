@@ -12,6 +12,7 @@ data class MethodInfo(
 
 data class MethodId private constructor(val name: String, val owner: String, val desc: String) {
     override fun toString() = "$owner.$name $desc"
+    fun equalsTo(ste: StackTraceElement) = name == ste.methodName && owner == ste.className
 
     companion object {
         fun build(name: String, owner: String, desc: String) = MethodId(name, owner.replace('/', '.'), desc)
@@ -23,6 +24,8 @@ data class MethodIdWithInfo(val method: MethodId, val info: MethodInfo, private 
 }
 
 data class CallPosition(val file: String, val line: Int) {
+    override fun toString() = "at $file:$line"
+
     companion object {
         val UNKNOWN = CallPosition("unknown", -1)
     }
@@ -33,12 +36,12 @@ data class DoResumeForSuspend(
         val suspend: SuspendFunction,
         val doResumeCallPosition: CallPosition? = null) {
     val doResumeForItself = doResume.method == suspend.method
+    override fun toString() = "$doResume for ${if (doResumeForItself) "itself" else "$suspend"}, $doResumeCallPosition"
 }
 
 data class MethodCall(val method: MethodId, val position: CallPosition, val fromMethod: MethodId? = null) {
-    override fun toString() = "$method at ${position.file}:${position.line}"
-
     val stackTraceElement by lazy { StackTraceElement(method.owner, method.name, position.file, position.line) }
+    override fun toString() = "$method at ${position.file}:${position.line}"
 }
 
 sealed class SuspendFunction(open val method: MethodId)
