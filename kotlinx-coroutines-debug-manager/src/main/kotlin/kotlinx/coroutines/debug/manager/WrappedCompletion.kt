@@ -25,7 +25,6 @@ class WrappedCompletion(val completion: Continuation<Any?>?) : Continuation<Any?
             if (completion is CoroutineImpl) {
                 val completionField = CoroutineImpl::class.java.getDeclaredField("completion")
                 completionField.isAccessible = true
-                StacksManager.newFrameDoResume[completion] = completionField[completion] as Continuation<*>
                 debug {
                     "existing coroutine with completion: " +
                             "${(completionField[completion] as Continuation<*>).hashCode()}, " +

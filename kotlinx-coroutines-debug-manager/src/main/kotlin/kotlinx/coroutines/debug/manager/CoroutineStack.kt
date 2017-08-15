@@ -101,32 +101,23 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
         unAppliedStack.clear()
     }
 
-    /**
-     * @return continuation which will be used as key to find this stack for the next doResume,
-     * when we will want to clear the stack. When we will want to add doResume as a new frame
-     * [topContinuation] should be used as a key
-     */
     fun handleDoResume(
             completion: Continuation<*>,
-            continuation: Continuation<*>, function: DoResumeForSuspend): Continuation<*> {
+            continuation: Continuation<*>, function: DoResumeForSuspend) {
         thread = Thread.currentThread()
         status = CoroutineStatus.Running
         val call = MethodCall(function.doResume.method, function.doResumeCallPosition ?: CallPosition.UNKNOWN)
         if (stack.isEmpty() || stack.first().continuation == completion) {
             topContinuation = continuation
             stack.add(0, CoroutineStackFrame(continuation, call))
-            return topContinuation
         }
         val currentTopFrame = if (function.doResumeForItself)
             stack.indexOfLast { it.continuation === continuation && it.call.method == function.doResume.method }
         else stack.indexOfLast { it.continuation === continuation } + 1
-        val keyForNextDoResume = if (function.doResumeForItself && currentTopFrame < stack.lastIndex)
-            stack[currentTopFrame + 1] else stack[currentTopFrame]
         if (currentTopFrame > 0) {
             topContinuation = continuation
             stack.dropInplace(currentTopFrame)
         }
-        return keyForNextDoResume.continuation
     }
 }
 

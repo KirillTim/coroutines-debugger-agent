@@ -27,13 +27,11 @@ object WakedUp : StackChangedEvent("WakedUp")
 typealias OnStackChangedCallback = StacksManager.(StackChangedEvent, WrappedContext) -> Unit
 
 object StacksManager {
-    val stacks = ConcurrentHashMap<WrappedContext, CoroutineStack>()
-    //map from completion(previous frame) to continuation(current frame)
-    val newFrameDoResume = ConcurrentHashMap<Continuation<*>, Continuation<*>>()
-    val runningCoroutines = ConcurrentHashMap<Thread, CoroutineStack>()
-    val initialCompletion = ConcurrentHashMap<WrappedCompletion, CoroutineStack>()
-    val bfm = ConcurrentHashMap<Continuation<*>, CoroutineStack>()
-    //val doResumeContinuation = ConcurrentHashMap<Continuation<*>, CoroutineStack>()
+    private val stacks = ConcurrentHashMap<WrappedContext, CoroutineStack>()
+    private val runningCoroutines = ConcurrentHashMap<Thread, CoroutineStack>()
+    private val initialCompletion = ConcurrentHashMap<WrappedCompletion, CoroutineStack>()
+    private val bigFuckingMap = ConcurrentHashMap<Continuation<*>, CoroutineStack>()
+    private val bigFuckingReverseMap = ConcurrentHashMap<CoroutineStack, HashSet<Continuation<*>>>()
 
     private val onChangeCallbacks = CopyOnWriteArrayList<OnStackChangedCallback>()
 
@@ -50,17 +48,15 @@ object StacksManager {
         debug { "handleNewCoroutineCreated(${wrappedCompletion.hashCode()})" }
         val stack = CoroutineStack(wrappedCompletion)
         stacks[stack.context] = stack
-        //doResumeContinuation[stack.topContinuation] = stack
         initialCompletion[wrappedCompletion] = stack
-        bfm[wrappedCompletion] = stack
+        addToBigFuckingMap(wrappedCompletion, stack)
         fireCallbacks(Created, stack.context)
     }
 
     fun handleCoroutineExit(wrappedCompletion: Continuation<*>) {
         debug { "handleCoroutineExit(${wrappedCompletion.hashCode()})" }
         val stack = initialCompletion.remove(wrappedCompletion)!!
-        val keys = bfm.filter { it.value == stack }.keys
-        keys.forEach { bfm.remove(it) }
+        bigFuckingReverseMap.remove(stack)?.forEach { bigFuckingMap.remove(it) }
         stacks.remove(stack.context)
         runningCoroutines.remove(stack.thread)
         fireCallbacks(Removed, stack.context)
@@ -69,29 +65,28 @@ object StacksManager {
     fun handleAfterSuspendFunctionReturn(continuation: Continuation<*>, call: MethodCall) {
         debug { "handleAfterSuspendFunctionReturn(${continuation.hashCode()}, $call)" }
         val stack = runningCoroutines[Thread.currentThread()]!!
-        //doResumeContinuation.remove(continuation)
-        bfm[continuation] = stack
+        addToBigFuckingMap(continuation, stack)
         if (stack.handleSuspendFunctionReturn(continuation, call)) {
             runningCoroutines.remove(stack.thread)
-            //doResumeContinuation[stack.topContinuation] = stack
             fireCallbacks(Suspended, stack.context)
         }
     }
 
     fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, function: DoResumeForSuspend) {
         debug { "handleDoResumeEnter(${completion.hashCode()}, ${continuation.hashCode()}, $function)" }
-        val continuationSearchingFor = completion//newFrameDoResume[completion] ?: completion
-        debug { "continuationSearchingFor = ${continuationSearchingFor.hashCode()}" }
-        val stack = bfm[completion] ?: bfm[continuation]!!
-        //val stack = doResumeContinuation.remove(continuationSearchingFor)!!
+        val stack = bigFuckingMap[completion] ?: bigFuckingMap[continuation]!!
         val previousStatus = stack.status
-        val nextDoResume = stack.handleDoResume(completion, continuation, function)
-        //doResumeContinuation[nextDoResume] = stack
-        bfm[nextDoResume] = stack
+        stack.handleDoResume(completion, continuation, function)
+        addToBigFuckingMap(continuation, stack)
         runningCoroutines[stack.thread] = stack
         if (previousStatus != CoroutineStatus.Running) {
             fireCallbacks(WakedUp, stack.context)
         }
+    }
+
+    private fun addToBigFuckingMap(continuation: Continuation<*>, stack: CoroutineStack) {
+        bigFuckingMap[continuation] = stack
+        bigFuckingReverseMap.getOrPut(stack, { hashSetOf() }).add(continuation)
     }
 
     private fun fireCallbacks(event: StackChangedEvent, context: WrappedContext) =
