@@ -28,7 +28,6 @@ typealias OnStackChangedCallback = StacksManager.(StackChangedEvent, WrappedCont
 
 object StacksManager {
     private val stacks = ConcurrentHashMap<WrappedContext, CoroutineStack>()
-    private val runningCoroutines = ConcurrentHashMap<Thread, CoroutineStack>()
     private val initialCompletion = ConcurrentHashMap<WrappedCompletion, CoroutineStack>()
     private val bigFuckingMap = ConcurrentHashMap<Continuation<*>, CoroutineStack>()
     private val bigFuckingReverseMap = ConcurrentHashMap<CoroutineStack, HashSet<Continuation<*>>>()
@@ -58,16 +57,14 @@ object StacksManager {
         val stack = initialCompletion.remove(wrappedCompletion)!!
         bigFuckingReverseMap.remove(stack)?.forEach { bigFuckingMap.remove(it) }
         stacks.remove(stack.context)
-        runningCoroutines.remove(stack.thread)
         fireCallbacks(Removed, stack.context)
     }
 
     fun handleAfterSuspendFunctionReturn(continuation: Continuation<*>, call: MethodCall) {
         debug { "handleAfterSuspendFunctionReturn(${continuation.hashCode()}, $call)" }
-        val stack = runningCoroutines[Thread.currentThread()]!!
+        val stack = bigFuckingMap[continuation]!!
         addToBigFuckingMap(continuation, stack)
         if (stack.handleSuspendFunctionReturn(continuation, call)) {
-            runningCoroutines.remove(stack.thread)
             fireCallbacks(Suspended, stack.context)
         }
     }
@@ -78,7 +75,6 @@ object StacksManager {
         val previousStatus = stack.status
         stack.handleDoResume(completion, continuation, function)
         addToBigFuckingMap(continuation, stack)
-        runningCoroutines[stack.thread] = stack
         if (previousStatus != CoroutineStatus.Running) {
             fireCallbacks(WakedUp, stack.context)
         }
