@@ -1,10 +1,13 @@
 package kotlinx.coroutines.debug.transformer
 
 import kotlinx.coroutines.debug.manager.*
-import org.objectweb.asm.Opcodes
-import org.objectweb.asm.Type
-import org.objectweb.asm.tree.*
-import org.objectweb.asm.util.TraceClassVisitor
+import org.jetbrains.org.objectweb.asm.Opcodes
+import org.jetbrains.org.objectweb.asm.Type
+import org.jetbrains.org.objectweb.asm.tree.*
+import org.jetbrains.org.objectweb.asm.tree.analysis.Analyzer
+import org.jetbrains.org.objectweb.asm.tree.analysis.BasicValue
+import org.jetbrains.org.objectweb.asm.tree.analysis.SimpleVerifier
+import org.jetbrains.org.objectweb.asm.util.TraceClassVisitor
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -116,7 +119,52 @@ internal fun MethodNode.isCreateCoroutine(owner: ClassNode) =
 
 internal fun MethodNode.isSuspend() = isSuspend(name, desc)
 
-internal fun MethodInsnNode.isSuspend() = isSuspend(name, desc)
+internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<MethodInsnNode> {
+    val suspensionCalls = mutableListOf<MethodInsnNode>()
+    val functionInterfaceInvokes = mutableListOf<Pair<Int, MethodInsnNode>>()
+    for ((index, instruction) in instructions.sequence.withIndex()) {
+        if (instruction.isSuspendSignature())
+            suspensionCalls += (instruction as MethodInsnNode)
+        else if (instruction.isFunctionInterfaceInvoke)
+            functionInterfaceInvokes += Pair(index, instruction as MethodInsnNode)
+    }
+    if (functionInterfaceInvokes.isNotEmpty()) {
+        val expectedInvokeLastArgumentClassName = //dirty hack
+                if (isDoResume
+                        || classNode.superName == COROUTINE_IMPL_TYPE.internalName
+                        || classNode.interfaces.contains(CONTINUATION_TYPE.internalName)) classNode.name
+                else {
+                    val fsm = instructions.sequence.firstOrNull { it.isStateMachineStartsHere() }
+                    val getLabel = fsm?.nextMeaningful?.nextMeaningful?.nextMeaningful as? FieldInsnNode
+                    getLabel?.owner
+                }
+        val stackAnalyzer = Analyzer(object : SimpleVerifier() {
+            //getClass is called from isAssignableFrom(..), getSuperClass(..), isInterface(..),
+            override fun getClass(t: Type?): Class<*>? = null
+
+            override fun isInterface(t: Type?) = false
+            override fun isAssignableFrom(t: Type?, u: Type?) = true
+            override fun getSuperClass(t: Type?): Type = OBJECT_TYPE
+        })
+        stackAnalyzer.analyze(classNode.name, this)
+        for ((index, invoke) in functionInterfaceInvokes) {
+            val frame = stackAnalyzer.frames[index] ?: continue
+            val lastMethodArgument = frame.getStack(frame.stackSize - 1) as BasicValue
+            //while isAssignableFrom and getSuperClass do nothing, stack analyzer can't calculate types correctly
+            //so we compare it with state machine class name
+            if (lastMethodArgument.type == CONTINUATION_TYPE || lastMethodArgument.type == COROUTINE_IMPL_TYPE
+                    || lastMethodArgument.type.internalName == expectedInvokeLastArgumentClassName)
+                suspensionCalls += invoke
+        }
+    }
+    return suspensionCalls
+}
+
+internal val AbstractInsnNode.isFunctionInterfaceInvoke: Boolean
+    get() = this is MethodInsnNode && opcode == Opcodes.INVOKEINTERFACE && name == "invoke"
+            && owner.matches("kotlin/jvm/functions/Function(\\d+)".toRegex())
+
+internal fun AbstractInsnNode.isSuspendSignature() = this is MethodInsnNode && isSuspend(name, desc)
 
 internal fun continuationOffsetFromEndInDesc(name: String) = if (name.endsWith("\$default")) 3 else 1
 

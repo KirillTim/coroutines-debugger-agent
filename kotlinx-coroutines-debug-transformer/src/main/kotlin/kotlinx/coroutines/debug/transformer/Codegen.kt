@@ -1,10 +1,10 @@
 package kotlinx.coroutines.debug.transformer
 
-import org.objectweb.asm.Opcodes
-import org.objectweb.asm.commons.InstructionAdapter
-import org.objectweb.asm.tree.AbstractInsnNode
-import org.objectweb.asm.tree.InsnList
-import org.objectweb.asm.tree.MethodNode
+import org.jetbrains.org.objectweb.asm.Opcodes
+import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
+import org.jetbrains.org.objectweb.asm.tree.AbstractInsnNode
+import org.jetbrains.org.objectweb.asm.tree.InsnList
+import org.jetbrains.org.objectweb.asm.tree.MethodNode
 
 /**
  * @author Kirill Timofeev
@@ -29,7 +29,7 @@ fun generateNewWrappedCompletion(completionIndex: Int) =
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleAfterSuspendCall] with continuation
- * and index of function call from [kotlinx.coroutines.debug.manager.suspendCalls] list
+ * and index of function call from [kotlinx.coroutines.debug.manager.allSuspendCalls] list
  */
 fun generateAfterSuspendCall(continuationVarIndex: Int, functionCallIndex: Int) =
         code {

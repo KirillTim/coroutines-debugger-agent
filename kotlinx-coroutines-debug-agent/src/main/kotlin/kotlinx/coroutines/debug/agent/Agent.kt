@@ -28,14 +28,18 @@ class Agent {
             System.setProperty("kotlinx.coroutines.debug", "")
             startServerIfNeeded(agentArgs)
             if (Logger.config.dataConsumers.isNotEmpty()) {
-                StacksManager.addOnStackChangedCallback { stackChangedEvent, coroutineContext ->
-                    data {
-                        buildString {
-                            append("event: $stackChangedEvent for context $coroutineContext\n")
-                            append("snapshot:\n")
-                            getSnapshot().forEach { append("${it.coroutineInfo(suspendCalls, doResumeToSuspendFunctions)}\n") }
+                StacksManager.addOnStackChangedCallback { event, coroutineContext ->
+                    if (event == Created || event == Suspended || event == Removed)
+                        data {
+                            buildString {
+                                append("event: $event for context $coroutineContext\n")
+                                append("snapshot:\n")
+                                getSnapshot().forEach {
+                                    append("${it.coroutineInfo(allSuspendCalls,
+                                            doResumeToSuspendFunctions)}\n")
+                                }
+                            }
                         }
-                    }
                 }
             }
             inst.addTransformer(CoroutinesDebugTransformer())
@@ -69,7 +73,8 @@ private fun tryConfigureLogger(agentArgs: String?) {
             }
     )
     Logger.config = if (logFileOutputStream != null) {
-        logToFile(logLevel, withTime = true, logFileOutputStream = logFileOutputStream, dataConsumers = dataFileOutputStreams)
+        logToFile(logLevel, withTime = true, logFileOutputStream = logFileOutputStream,
+                dataConsumers = dataFileOutputStreams)
     } else {
         if (dataFileOutputStreams.isNotEmpty() || dataFileValue != null)
             LoggerConfig(logLevel, withTime = true, dataConsumers = dataFileOutputStreams)

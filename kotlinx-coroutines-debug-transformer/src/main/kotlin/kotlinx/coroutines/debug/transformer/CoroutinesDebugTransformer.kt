@@ -1,13 +1,13 @@
 package kotlinx.coroutines.debug.transformer
 
 import kotlinx.coroutines.debug.manager.*
-import org.objectweb.asm.ClassReader
-import org.objectweb.asm.ClassWriter
-import org.objectweb.asm.Opcodes
-import org.objectweb.asm.Type
-import org.objectweb.asm.tree.ClassNode
-import org.objectweb.asm.tree.MethodInsnNode
-import org.objectweb.asm.tree.MethodNode
+import org.jetbrains.org.objectweb.asm.ClassReader
+import org.jetbrains.org.objectweb.asm.ClassWriter
+import org.jetbrains.org.objectweb.asm.Opcodes
+import org.jetbrains.org.objectweb.asm.Type
+import org.jetbrains.org.objectweb.asm.tree.ClassNode
+import org.jetbrains.org.objectweb.asm.tree.MethodInsnNode
+import org.jetbrains.org.objectweb.asm.tree.MethodNode
 import java.lang.instrument.ClassFileTransformer
 import java.security.ProtectionDomain
 
@@ -29,20 +29,14 @@ private fun MethodNode.findContinuationVarIndex(classNode: ClassNode): Int {
     return argumentVarIndex(Type.getArgumentTypes(desc), continuationArgIndex) + if (isStatic) 0 else 1
 }
 
-private fun MethodNode.addSuspendCallHandlers(continuationVarIndex: Int, classNode: ClassNode) {
+private fun MethodNode.addSuspendCallHandlers(suspendCalls: List<MethodInsnNode>,
+                                              continuationVarIndex: Int, classNode: ClassNode) {
     val lines = instructions.methodCallLineNumber()
-    for (i in instructions) {
-        if (i is MethodInsnNode && i.isSuspend()) {
-            /*debug {
-                "instrument call ${i.owner}.${i.event}(${i.desc}) " +
-                        "from ${classNode.event}.${event} at ${classNode.sourceFile}:${lines[i]}, " +
-                        "cont index = $continuationVarIndex"
-            }*/
-            suspendCalls += MethodCall(i.buildMethodId(),
-                    CallPosition(classNode.sourceFile, lines[i] ?: -1),
-                    buildMethodId(classNode))
-            instructions.insert(i, generateAfterSuspendCall(continuationVarIndex, suspendCalls.lastIndex))
-        }
+    for (call in suspendCalls) {
+        allSuspendCalls += MethodCall(call.buildMethodId(),
+                CallPosition(classNode.sourceFile, lines[call] ?: -1),
+                buildMethodId(classNode))
+        instructions.insert(call, generateAfterSuspendCall(continuationVarIndex, allSuspendCalls.lastIndex))
     }
 }
 
@@ -78,7 +72,10 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
         instructions.insert(generateHandleDoResumeCallEnter(continuation, doResumeToSuspendFunctions.lastIndex))
         if (!isAnonymous) return
     }
-    addSuspendCallHandlers(continuation, classNode)
+    val suspendCalls = suspendCallInstructions(classNode)
+    if (suspendCalls.isEmpty()) return
+    debug { buildString { append("suspend calls:\n"); suspendCalls.forEach { append("${it.buildMethodId()}\n") } } }
+    addSuspendCallHandlers(suspendCalls, continuation, classNode)
 }
 
 class CoroutinesDebugTransformer : ClassFileTransformer {

@@ -20,12 +20,14 @@ shadowJar {
     configurations = [project.configurations.compile]
 
     dependencies {
-        include dependency("org.ow2.asm:asm-all:.*")
+        //include dependency("org.ow2.asm:asm-all:.*")
+        include dependency("org.jetbrains.asm:asm-all.*")
         include dependency(":kotlinx-coroutines-debug.*") //such a regexp, very wow!
         exclude dependency("org.jetbrains.kotlin:kotlin-stdlib-jre8")
     }
 
-    relocate "org.objectweb.asm", "kotlinx.coroutines.debug.org.objectweb.asm"
+    //relocate "org.objectweb.asm", "kotlinx.coroutines.debug.org.objectweb.asm"
+    relocate "org.jetbrains.org.objectweb.asm", "kotlinx.coroutines.debug.org.objectweb.asm"
 }
 
 jar {

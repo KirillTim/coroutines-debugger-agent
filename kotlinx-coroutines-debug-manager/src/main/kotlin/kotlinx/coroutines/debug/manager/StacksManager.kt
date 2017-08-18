@@ -13,7 +13,7 @@ val DEBUG_AGENT_PACKAGE_PREFIX = "kotlinx.coroutines.debug"
 
 val doResumeToSuspendFunctions = mutableListOf<DoResumeForSuspend>() //TODO concurrency
 
-val suspendCalls = mutableListOf<MethodCall>() //TODO concurrency
+val allSuspendCalls = mutableListOf<MethodCall>() //TODO concurrency
 
 sealed class StackChangedEvent(private val event: String) {
     override fun toString() = event
@@ -98,7 +98,7 @@ object InstrumentedCodeEventsHandler {
     @JvmStatic
     fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) {
         val suspended = result === COROUTINE_SUSPENDED
-        val call = suspendCalls[functionCallIndex]
+        val call = allSuspendCalls[functionCallIndex]
         debug {
             "suspend call of ${call.method} at ${call.position.file}:${call.position.line} from ${call.fromMethod}, " +
                     "with ${continuation.hashCode()} : ${if (suspended) "suspended" else "result = $result"}"
