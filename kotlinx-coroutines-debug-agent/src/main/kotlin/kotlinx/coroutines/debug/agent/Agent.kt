@@ -35,8 +35,7 @@ class Agent {
                                 append("event: $event for context $coroutineContext\n")
                                 append("snapshot:\n")
                                 getSnapshot().forEach {
-                                    append("${it.coroutineInfo(allSuspendCalls,
-                                            doResumeToSuspendFunctions)}\n")
+                                    append("${it.coroutineInfo(allSuspendCalls, allDoResumeCalls)}\n")
                                 }
                             }
                         }

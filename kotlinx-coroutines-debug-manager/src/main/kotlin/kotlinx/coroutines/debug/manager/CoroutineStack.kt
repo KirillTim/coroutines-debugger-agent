@@ -79,11 +79,13 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
     /**
      * @return true if new frames were add to stack, false otherwise
      */
-    fun handleSuspendFunctionReturn(completion: Continuation<*>, call: MethodCall): Boolean {
+    fun handleSuspendFunctionReturn(completion: Continuation<*>, call: SuspendCall): Boolean {
         if (call.method.name.endsWith("\$default")) {
-            val delegatedCall = requireNotNull(unAppliedStack.lastOrNull(), { "can't find delegated call for  $call" })
-            unAppliedStack[unAppliedStack.lastIndex] =
-                    delegatedCall.copy(call = delegatedCall.call.copy(position = call.position))
+            val (frameId, delegatedCall) =
+                    requireNotNull(unAppliedStack.lastOrNull(), { "can't find delegated call for  $call" })
+            val updatedFrame = CoroutineStackFrame(frameId,
+                    NamedFunctionSuspendCall(delegatedCall.method, delegatedCall.position, delegatedCall.fromMethod))
+            unAppliedStack[unAppliedStack.lastIndex] = updatedFrame
         }
         unAppliedStack.add(CoroutineStackFrame(CompletionId(completion), call))
         if (completion === topContinuation && (call.fromMethod == stack.first().call.method
@@ -111,14 +113,13 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
     }
 
     fun handleDoResume(completion: Continuation<*>,
-                       continuation: Continuation<*>, function: DoResumeForSuspend): Continuation<*> {
+                       continuation: Continuation<*>, function: DoResumeCall): Continuation<*> {
         thread = Thread.currentThread()
         status = CoroutineStatus.Running
         if (stack.isEmpty()) {
             require(initialCompletion === completion)
             topContinuation = continuation
-            val call = MethodCall(function.doResume.method, function.doResumeCallPosition ?: CallPosition.UNKNOWN)
-            stack.add(0, CoroutineStackFrame(ContinuationId(continuation), call))
+            stack.add(0, CoroutineStackFrame(ContinuationId(continuation), function))
             return continuation
         }
         topContinuation = continuation

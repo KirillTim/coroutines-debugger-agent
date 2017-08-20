@@ -4,12 +4,6 @@ package kotlinx.coroutines.debug.manager
  * @author Kirill Timofeev
  */
 
-data class MethodInfo(
-        val isAnonymous: Boolean = false,
-        val isSuspend: Boolean = false,
-        val isDoResume: Boolean = false,
-        val isStateMachine: Boolean = false)
-
 data class MethodId private constructor(val name: String, val owner: String, val desc: String) {
     override fun toString() = "$owner.$name $desc"
     fun equalsTo(ste: StackTraceElement) = name == ste.methodName && owner == ste.className
@@ -17,10 +11,6 @@ data class MethodId private constructor(val name: String, val owner: String, val
     companion object {
         fun build(name: String, owner: String, desc: String) = MethodId(name, owner.replace('/', '.'), desc)
     }
-}
-
-data class MethodIdWithInfo(val method: MethodId, val info: MethodInfo, private val pretty: String = "") {
-    override fun toString() = if (pretty.isNotEmpty()) pretty else "$method" + info
 }
 
 data class CallPosition(val file: String, val line: Int) {
@@ -31,21 +21,52 @@ data class CallPosition(val file: String, val line: Int) {
     }
 }
 
-data class DoResumeForSuspend(
-        val doResume: MethodIdWithInfo,
-        val suspend: SuspendFunction,
-        val doResumeCallPosition: CallPosition? = null) {
-    val doResumeForItself = doResume.method == suspend.method
-    override fun toString() = "$doResume for ${if (doResumeForItself) "itself" else "$suspend"}, $doResumeCallPosition"
+sealed class MethodCall(
+        open val method: MethodId,
+        open val position: CallPosition,
+        open val fromMethod: MethodId? = null) {
+    abstract val stackTraceElement: StackTraceElement
+    override fun toString() = "$method $position"
 }
 
-data class MethodCall(val method: MethodId, val position: CallPosition, val fromMethod: MethodId? = null) {
-    val stackTraceElement by lazy { StackTraceElement(method.owner, method.name, position.file, position.line) }
-    override fun toString() = "$method at ${position.file}:${position.line}"
+data class DoResumeCall(
+        override val method: MethodId,
+        override val position: CallPosition,
+        override val fromMethod: MethodId? = null
+) : MethodCall(method, position, fromMethod) {
+    override val stackTraceElement
+            by lazy { StackTraceElement(method.owner, "invoke", position.file, position.line) }
+
+    override fun toString() = super.toString()
 }
 
-sealed class SuspendFunction(open val method: MethodId)
+sealed class SuspendCall(
+        override val method: MethodId,
+        override val position: CallPosition,
+        override val fromMethod: MethodId? = null
+) : MethodCall(method, position, fromMethod) {
+    override fun toString() = super.toString()
+}
 
-data class AnonymousSuspendFunction(override val method: MethodId) : SuspendFunction(method)
+data class NamedFunctionSuspendCall(
+        override val method: MethodId,
+        override val position: CallPosition,
+        override val fromMethod: MethodId? = null
+) : SuspendCall(method, position, fromMethod) {
+    override val stackTraceElement
+            by lazy { StackTraceElement(method.owner, method.name, position.file, position.line) }
 
-data class NamedSuspendFunction(override val method: MethodId) : SuspendFunction(method)
+    override fun toString() = super.toString()
+}
+
+data class InvokeSuspendCall(
+        override val method: MethodId,
+        override val position: CallPosition,
+        override val fromMethod: MethodId?,
+        var realOwner: String? = null
+) : SuspendCall(method, position, fromMethod) {
+    override val stackTraceElement
+            by lazy { StackTraceElement(realOwner ?: method.owner, method.name, position.file, position.line) }
+
+    override fun toString() = super.toString()
+}

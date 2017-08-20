@@ -42,7 +42,7 @@ fun generateAfterSuspendCall(continuationVarIndex: Int, functionCallIndex: Int) 
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleDoResumeEnter] with continuation
- * and index of doResume function in [kotlinx.coroutines.debug.manager.doResumeToSuspendFunctions] list
+ * and index of doResume function in [kotlinx.coroutines.debug.manager.allDoResumeCalls] list
  */
 fun generateHandleDoResumeCallEnter(continuationVarIndex: Int, doResumeIndex: Int) =
         code {

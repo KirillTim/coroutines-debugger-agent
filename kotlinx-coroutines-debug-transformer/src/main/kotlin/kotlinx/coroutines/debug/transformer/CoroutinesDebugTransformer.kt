@@ -6,7 +6,6 @@ import org.jetbrains.org.objectweb.asm.ClassWriter
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.ClassNode
-import org.jetbrains.org.objectweb.asm.tree.MethodInsnNode
 import org.jetbrains.org.objectweb.asm.tree.MethodNode
 import java.lang.instrument.ClassFileTransformer
 import java.security.ProtectionDomain
@@ -29,14 +28,22 @@ private fun MethodNode.findContinuationVarIndex(classNode: ClassNode): Int {
     return argumentVarIndex(Type.getArgumentTypes(desc), continuationArgIndex) + if (isStatic) 0 else 1
 }
 
-private fun MethodNode.addSuspendCallHandlers(suspendCalls: List<MethodInsnNode>,
+private fun SuspendCallInsnNode.buildSuspendCall(classNode: ClassNode,
+                                                 position: CallPosition,
+                                                 calledFrom: MethodNode): SuspendCall = when (this) {
+    is NamedSuspendCallInsnNode ->
+        NamedFunctionSuspendCall(insn.buildMethodId(), position, calledFrom.buildMethodId(classNode))
+    is InvokeSuspendCallInsnNode ->
+        InvokeSuspendCall(insn.buildMethodId(), position, calledFrom.buildMethodId(classNode))
+}
+
+private fun MethodNode.addSuspendCallHandlers(suspendCallsInThisMethod: List<SuspendCallInsnNode>,
                                               continuationVarIndex: Int, classNode: ClassNode) {
     val lines = instructions.methodCallLineNumber()
-    for (call in suspendCalls) {
-        allSuspendCalls += MethodCall(call.buildMethodId(),
-                CallPosition(classNode.sourceFile, lines[call] ?: -1),
-                buildMethodId(classNode))
-        instructions.insert(call, generateAfterSuspendCall(continuationVarIndex, allSuspendCalls.lastIndex))
+    suspendCallsInThisMethod.forEach {
+        val position = CallPosition(classNode.sourceFile, lines[it.insn] ?: -1)
+        allSuspendCalls += it.buildSuspendCall(classNode, position, this)
+        instructions.insert(it.insn, generateAfterSuspendCall(continuationVarIndex, allSuspendCalls.lastIndex))
     }
 }
 
@@ -62,19 +69,18 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
                 "cont: $continuation, isAnonymous: $isAnonymous"
     }
     if (isDoResume) {
-        val methodId = buildMethodIdWithInfo(classNode)
-        val forFunction = if (isAnonymous)
-            AnonymousSuspendFunction(MethodId.build(name, classNode.name, desc)) else
-            correspondingSuspendFunctionForDoResume()
-        val doResumeFirstInsnPosition = CallPosition(classNode.sourceFile, firstInstructionLineNumber())
-                .takeIf { isAnonymous }
-        doResumeToSuspendFunctions += DoResumeForSuspend(methodId, forFunction, doResumeFirstInsnPosition)
-        instructions.insert(generateHandleDoResumeCallEnter(continuation, doResumeToSuspendFunctions.lastIndex))
+        val doResumeFirstInsnPosition =
+                if (isAnonymous) CallPosition(classNode.sourceFile, firstInstructionLineNumber())
+                else CallPosition.UNKNOWN
+        allDoResumeCalls += DoResumeCall(buildMethodId(classNode), doResumeFirstInsnPosition)
+        instructions.insert(generateHandleDoResumeCallEnter(continuation, allDoResumeCalls.lastIndex))
         if (!isAnonymous) return
     }
     val suspendCalls = suspendCallInstructions(classNode)
     if (suspendCalls.isEmpty()) return
-    debug { buildString { append("suspend calls:\n"); suspendCalls.forEach { append("${it.buildMethodId()}\n") } } }
+    debug {
+        buildString { append("suspend calls:\n"); suspendCalls.forEach { append("${it.insn.buildMethodId()}\n") } }
+    }
     addSuspendCallHandlers(suspendCalls, continuation, classNode)
 }
 

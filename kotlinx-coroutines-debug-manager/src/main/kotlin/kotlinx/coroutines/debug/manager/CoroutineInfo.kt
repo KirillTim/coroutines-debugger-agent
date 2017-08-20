@@ -4,13 +4,10 @@ package kotlinx.coroutines.debug.manager
  * @author Kirill Timofeev
  */
 
-private fun StackTraceElement.rename(doResumeCalls: Collection<DoResumeForSuspend>): StackTraceElement {
-    if (methodName != "doResume") return this
-    val call = requireNotNull(doResumeCalls.find { it.doResume.method.equalsTo(this) },
-            { "can't find where to map $className.$methodName" })
-    val newMethodName = if (call.doResumeForItself) "invoke" else call.suspend.method.name
-    return StackTraceElement(className, newMethodName, fileName, lineNumber)
-}
+private fun StackTraceElement.rename() =
+        if (methodName != "doResume") this
+        else StackTraceElement(className, "invoke", fileName, lineNumber)
+
 
 data class Snapshot(
         val name: String,
@@ -19,32 +16,30 @@ data class Snapshot(
         val thread: Thread,
         val coroutineStack: List<MethodCall>) {
     val threadStack = thread.stackTrace.toList()
-    fun coroutineInfo(
-            knownSuspendCalls: Collection<MethodCall>,
-            doResumeCalls: Collection<DoResumeForSuspend>) = when (status) {
-        CoroutineStatus.Created -> CreatedCoroutineInfo(name, "$context", thread)
-        CoroutineStatus.Running -> {
-            val (before, coroutine) = fixThreadStack(threadStack, knownSuspendCalls, doResumeCalls)
-            RunningCoroutineInfo(name, "$context", thread, before, coroutine)
-        }
-        CoroutineStatus.Suspended -> SuspendedCoroutineInfo(name, "$context", thread,
-                coroutineStack.map { it.stackTraceElement.rename(doResumeCalls) })
-    }
+    fun coroutineInfo(knownSuspendCalls: Collection<SuspendCall>, knownDoResumeCalls: Collection<DoResumeCall>) =
+            when (status) {
+                CoroutineStatus.Created -> CreatedCoroutineInfo(name, "$context", thread)
+                CoroutineStatus.Running -> {
+                    val (before, coroutine) = fixThreadStack(threadStack, knownSuspendCalls, knownDoResumeCalls)
+                    RunningCoroutineInfo(name, "$context", thread, before, coroutine)
+                }
+                CoroutineStatus.Suspended -> SuspendedCoroutineInfo(name, "$context", thread,
+                        coroutineStack.map { it.stackTraceElement.rename() })
+            }
 
     private fun fixThreadStack(
             threadStack: List<StackTraceElement>,
-            knownSuspendCalls: Collection<MethodCall>,
-            doResumeCalls: Collection<DoResumeForSuspend>): Pair<List<StackTraceElement>, List<StackTraceElement>> {
+            knownSuspendCalls: Collection<SuspendCall>,
+            knownDoResumeCalls: Collection<DoResumeCall>): Pair<List<StackTraceElement>, List<StackTraceElement>> {
         val suspendCall: (StackTraceElement) -> Boolean = { ste ->
-            knownSuspendCalls.any { it.stackTraceElement == ste } || doResumeCalls.any { it.doResume.method.equalsTo(ste) }
+            knownSuspendCalls.any { it.stackTraceElement == ste } || knownDoResumeCalls.any { it.method.equalsTo(ste) }
         }
         val stackWithoutTechnicalCalls = threadStack.filter { !it.className.startsWith(DEBUG_AGENT_PACKAGE_PREFIX) }
                 .drop(1) //java.lang.Thread.getStackTrace(Thread.java:1559)
         val top = stackWithoutTechnicalCalls.indexOfFirst(suspendCall)
         if (top == -1) return Pair(stackWithoutTechnicalCalls, emptyList())
         val bottom = stackWithoutTechnicalCalls.indexOfLast(suspendCall)
-        val fixedPart = stackWithoutTechnicalCalls.subList(top, bottom + 1)
-                .filter(suspendCall).map { it.rename(doResumeCalls) }
+        val fixedPart = stackWithoutTechnicalCalls.subList(top, bottom + 1).filter(suspendCall).map { it.rename() }
         return Pair(stackWithoutTechnicalCalls.drop(bottom + 1), stackWithoutTechnicalCalls.take(top) + fixedPart)
     }
 }

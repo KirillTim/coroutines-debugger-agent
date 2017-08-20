@@ -1,6 +1,6 @@
 package kotlinx.coroutines.debug.transformer
 
-import kotlinx.coroutines.debug.manager.*
+import kotlinx.coroutines.debug.manager.MethodId
 import org.jetbrains.org.objectweb.asm.Opcodes.*
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.*
@@ -90,13 +90,13 @@ internal fun InsnList.lastARETURN(): AbstractInsnNode? {
 internal val InsnList.sequence: Sequence<AbstractInsnNode>
     get() = iterator().asSequence().filterIsInstance<AbstractInsnNode>()
 
-internal fun MethodNode.correspondingSuspendFunctionForDoResume(): SuspendFunction {
+internal fun MethodNode.correspondingSuspendFunctionForDoResume(): MethodId {
     require(isDoResume) { "$name should be doResume functionCall" }
     val last = instructions.lastMeaningful()
     require(last.isARETURN) { "last meaningful instruction must be areturn" }
     val suspendFunCall = requireNotNull(last?.previousMeaningful as? MethodInsnNode,
             { "can't find corresponding suspend method call" })
-    return NamedSuspendFunction(MethodId.build(suspendFunCall.name, suspendFunCall.owner, suspendFunCall.desc))
+    return MethodId.build(suspendFunCall.name, suspendFunCall.owner, suspendFunCall.desc)
 }
 
 internal val Type.isResumeMethodDesc: Boolean
@@ -120,12 +120,17 @@ internal fun MethodNode.isCreateCoroutine(owner: ClassNode) =
 
 internal fun MethodNode.isSuspend() = isSuspend(name, desc)
 
-internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<MethodInsnNode> {
-    val suspensionCalls = mutableListOf<MethodInsnNode>()
+internal sealed class SuspendCallInsnNode(open val insn: MethodInsnNode)
+
+internal data class NamedSuspendCallInsnNode(override val insn: MethodInsnNode) : SuspendCallInsnNode(insn)
+internal data class InvokeSuspendCallInsnNode(override val insn: MethodInsnNode) : SuspendCallInsnNode(insn)
+
+internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<SuspendCallInsnNode> {
+    val suspensionCalls = mutableListOf<SuspendCallInsnNode>()
     val functionInterfaceInvokes = mutableListOf<Pair<Int, MethodInsnNode>>()
     for ((index, instruction) in instructions.sequence.withIndex()) {
         if (instruction.isSuspendSignature())
-            suspensionCalls += (instruction as MethodInsnNode)
+            suspensionCalls += NamedSuspendCallInsnNode(instruction as MethodInsnNode)
         else if (instruction.isFunctionInterfaceInvoke)
             functionInterfaceInvokes += Pair(index, instruction as MethodInsnNode)
     }
@@ -159,7 +164,7 @@ internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<Meth
             //so we compare it with state machine class name
             if (lastMethodArgument.type == CONTINUATION_TYPE || lastMethodArgument.type == COROUTINE_IMPL_TYPE
                     || lastMethodArgument.type.internalName == expectedInvokeLastArgumentClassName)
-                suspensionCalls += invoke
+                suspensionCalls += InvokeSuspendCallInsnNode(invoke)
         }
     }
     return suspensionCalls
@@ -180,7 +185,7 @@ private fun isSuspend(name: String, desc: String): Boolean {
             && descType.returnType == Type.getType(Any::class.java)
 }
 
-private fun prettyPrint(method: MethodId, argumentValues: List<Any>? = null): String {
+internal fun prettyPrint(method: MethodId, argumentValues: List<Any>? = null): String {
     val descType = Type.getType(method.desc)
     val arguments = argumentValues?.joinToString() ?:
             descType.argumentTypes.joinToString(transform = { it.className.split('.').last() })
@@ -191,13 +196,6 @@ private fun prettyPrint(method: MethodId, argumentValues: List<Any>? = null): St
 internal fun MethodInsnNode.buildMethodId() = MethodId.build(name, owner, desc)
 
 internal fun MethodNode.buildMethodId(classNode: ClassNode) = MethodId.build(name, classNode.name, desc)
-
-internal fun MethodNode.buildMethodIdWithInfo(classNode: ClassNode): MethodIdWithInfo {
-    val isSMForAnonymous = isStateMachineForAnonymousSuspendFunction() //FIXME how to determine is anonymous or not?
-    val info = MethodInfo(isSMForAnonymous, isSuspend(), isDoResume, isSMForAnonymous)
-    val methodId = buildMethodId(classNode)
-    return MethodIdWithInfo(methodId, info, prettyPrint(methodId))
-}
 
 internal fun MethodNode.firstInstructionLineNumber() = //FIXME
         instructions.sequence.filterIsInstance<LineNumberNode>().map { it.line }.min() ?: -1

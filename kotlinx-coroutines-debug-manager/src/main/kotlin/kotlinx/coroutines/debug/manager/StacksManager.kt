@@ -12,9 +12,9 @@ import kotlin.coroutines.experimental.intrinsics.COROUTINE_SUSPENDED
 
 val DEBUG_AGENT_PACKAGE_PREFIX = "kotlinx.coroutines.debug"
 
-val doResumeToSuspendFunctions = mutableListOf<DoResumeForSuspend>() //TODO concurrency
+val allSuspendCalls = mutableListOf<SuspendCall>() //TODO concurrency
 
-val allSuspendCalls = mutableListOf<MethodCall>() //TODO concurrency
+val allDoResumeCalls = mutableListOf<DoResumeCall>()
 
 sealed class StackChangedEvent(private val event: String) {
     override fun toString() = event
@@ -64,7 +64,7 @@ object StacksManager {
         fireCallbacks(Removed, stack.context)
     }
 
-    fun handleAfterSuspendFunctionReturn(continuation: Continuation<*>, call: MethodCall) {
+    fun handleAfterSuspendFunctionReturn(continuation: Continuation<*>, call: SuspendCall) {
         debug { "handleAfterSuspendFunctionReturn(${continuation.hashCode()}, $call)" }
         val runningOnCurrentThread = runningOnThread[Thread.currentThread()]!!
         val stack = runningOnCurrentThread.last()
@@ -76,7 +76,7 @@ object StacksManager {
         }
     }
 
-    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, function: DoResumeForSuspend) {
+    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, function: DoResumeCall) {
         debug { "handleDoResumeEnter(compl: ${completion.hashCode()}, cont: ${continuation.hashCode()}, $function)" }
         if (ignoreDoResumeWithCompletion.remove(completion)) {
             debug { "ignored" }
@@ -131,8 +131,6 @@ object InstrumentedCodeEventsHandler {
     }
 
     @JvmStatic
-    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, doResumeIndex: Int) {
-        val function = doResumeToSuspendFunctions[doResumeIndex]
-        StacksManager.handleDoResumeEnter(completion, continuation, function)
-    }
+    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, doResumeIndex: Int) =
+            StacksManager.handleDoResumeEnter(completion, continuation, allDoResumeCalls[doResumeIndex])
 }
