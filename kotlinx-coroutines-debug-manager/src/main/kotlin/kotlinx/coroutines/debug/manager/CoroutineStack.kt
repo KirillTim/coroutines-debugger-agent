@@ -5,10 +5,17 @@ import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.CoroutineContext
 import kotlin.coroutines.experimental.EmptyCoroutineContext
 
-data class CoroutineStackFrame(
-        val continuation: Continuation<*>,
-        val call: MethodCall) {
-    override fun toString() = "continuation: ${continuation.hashCode()}, $call"
+private sealed class FrameId(open val value: Continuation<*>)
+private data class ContinuationId(override val value: Continuation<*>) : FrameId(value) {
+    override fun toString() = "Continuation(${value.hashCode()})"
+}
+
+private data class CompletionId(override val value: Continuation<*>) : FrameId(value) {
+    override fun toString() = "Completion(${value.hashCode()})"
+}
+
+private data class CoroutineStackFrame(val id: FrameId, val call: MethodCall) {
+    override fun toString() = "$id, $call"
 }
 
 sealed class WrappedContext(open val context: CoroutineContext) {
@@ -61,8 +68,9 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
         private set
     var status: CoroutineStatus = CoroutineStatus.Created
         private set
-    var topContinuation: Continuation<*> = initialCompletion
+    var topFrameCompletion: Continuation<*> = initialCompletion //key to find stack for doResume
         private set
+    private var topContinuation: Continuation<*> = initialCompletion
     private val stack = mutableListOf<CoroutineStackFrame>() //FIXME: deque
     private val unAppliedStack = mutableListOf<CoroutineStackFrame>()
 
@@ -71,14 +79,15 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
     /**
      * @return true if new frames were add to stack, false otherwise
      */
-    fun handleSuspendFunctionReturn(continuation: Continuation<*>, call: MethodCall): Boolean {
+    fun handleSuspendFunctionReturn(completion: Continuation<*>, call: MethodCall): Boolean {
         if (call.method.name.endsWith("\$default")) {
             val delegatedCall = requireNotNull(unAppliedStack.lastOrNull(), { "can't find delegated call for  $call" })
             unAppliedStack[unAppliedStack.lastIndex] =
                     delegatedCall.copy(call = delegatedCall.call.copy(position = call.position))
         }
-        unAppliedStack.add(CoroutineStackFrame(continuation, call))
-        if (continuation === topContinuation && call.fromMethod == stack.first().call.method) {
+        unAppliedStack.add(CoroutineStackFrame(CompletionId(completion), call))
+        if (completion === topContinuation && (call.fromMethod == stack.first().call.method
+                || call.fromMethod?.name == "doResume" && stack.first().call.method.name == "invoke")) {
             applyStack()
             return true
         }
@@ -91,33 +100,34 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
                 append("stack applied\n")
                 append("topCurrentContinuation hash: ${topContinuation.hashCode()}\n")
                 append("initialCompletion: ${initialCompletion.hashCode()}\n")
-                append("temp: ${unAppliedStack.joinToString("\n")}\n")
-                append("stack: ${stack.joinToString("\n")}")
+                append("temp:\n${unAppliedStack.joinToString("\n")}\n")
+                append("stack:\n${stack.joinToString("\n")}")
             }
         }
         status = CoroutineStatus.Suspended
         stack.addAll(0, unAppliedStack)
-        topContinuation = stack.first().continuation
+        topFrameCompletion = stack.first().id.value
         unAppliedStack.clear()
     }
 
-    fun handleDoResume(
-            completion: Continuation<*>,
-            continuation: Continuation<*>, function: DoResumeForSuspend) {
+    fun handleDoResume(completion: Continuation<*>,
+                       continuation: Continuation<*>, function: DoResumeForSuspend): Continuation<*> {
         thread = Thread.currentThread()
         status = CoroutineStatus.Running
-        val call = MethodCall(function.doResume.method, function.doResumeCallPosition ?: CallPosition.UNKNOWN)
-        if (stack.isEmpty() || stack.first().continuation == completion) {
+        if (stack.isEmpty()) {
+            require(initialCompletion === completion)
             topContinuation = continuation
-            stack.add(0, CoroutineStackFrame(continuation, call))
+            val call = MethodCall(function.doResume.method, function.doResumeCallPosition ?: CallPosition.UNKNOWN)
+            stack.add(0, CoroutineStackFrame(ContinuationId(continuation), call))
+            return continuation
         }
-        val currentTopFrame = if (function.doResumeForItself)
-            stack.indexOfLast { it.continuation === continuation && it.call.method == function.doResume.method }
-        else stack.indexOfLast { it.continuation === continuation } + 1
-        if (currentTopFrame > 0) {
-            topContinuation = continuation
-            stack.dropInplace(currentTopFrame)
-        }
+        topContinuation = continuation
+        topFrameCompletion = completion
+        val framesToRemove = stack.indexOfLast { it.id is CompletionId && it.id.value === continuation } + 1
+        debug { "framesToRemove: $framesToRemove" }
+        stack.dropInplace(framesToRemove)
+        debug { "result stack size: ${stack.size}" }
+        return completion
     }
 }
 

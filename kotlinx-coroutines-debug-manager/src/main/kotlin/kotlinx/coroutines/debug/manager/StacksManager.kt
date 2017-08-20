@@ -1,5 +1,6 @@
 package kotlinx.coroutines.debug.manager
 
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.experimental.Continuation
@@ -28,10 +29,11 @@ typealias OnStackChangedCallback = StacksManager.(StackChangedEvent, WrappedCont
 
 object StacksManager {
     private val stacks = ConcurrentHashMap<WrappedContext, CoroutineStack>()
-    private val runningCoroutines = ConcurrentHashMap<Thread, CoroutineStack>()
+    private val topDoResumeContinuation = ConcurrentHashMap<Continuation<*>, CoroutineStack>()
+    private val runningOnThread = ConcurrentHashMap<Thread, MutableList<CoroutineStack>>()
     private val initialCompletion = ConcurrentHashMap<WrappedCompletion, CoroutineStack>()
-    private val bigFuckingMap = ConcurrentHashMap<Continuation<*>, CoroutineStack>()
-    private val bigFuckingReverseMap = ConcurrentHashMap<CoroutineStack, HashSet<Continuation<*>>>()
+    private val ignoreDoResumeWithCompletion: MutableSet<Continuation<*>> =
+            Collections.newSetFromMap(ConcurrentHashMap<Continuation<*>, Boolean>())
 
     private val onChangeCallbacks = CopyOnWriteArrayList<OnStackChangedCallback>()
 
@@ -44,53 +46,70 @@ object StacksManager {
         return@synchronized stacks.values.map { it.getSnapshot() }.toList()
     }
 
+    fun ignoreNextDoResume(completion: Continuation<*>) = ignoreDoResumeWithCompletion.add(completion)
+
     fun handleNewCoroutineCreated(wrappedCompletion: WrappedCompletion) {
         debug { "handleNewCoroutineCreated(${wrappedCompletion.hashCode()})" }
         val stack = CoroutineStack(wrappedCompletion)
         stacks[stack.context] = stack
         initialCompletion[wrappedCompletion] = stack
-        addToBigFuckingMap(wrappedCompletion, stack)
         fireCallbacks(Created, stack.context)
     }
 
     fun handleCoroutineExit(wrappedCompletion: Continuation<*>) {
         debug { "handleCoroutineExit(${wrappedCompletion.hashCode()})" }
         val stack = initialCompletion.remove(wrappedCompletion)!!
-        bigFuckingReverseMap.remove(stack)?.forEach { bigFuckingMap.remove(it) }
         stacks.remove(stack.context)
-        runningCoroutines.remove(stack.thread)
+        runningOnThread[stack.thread]?.let { if (it.lastOrNull() == stack) it.dropLastInplace() }
         fireCallbacks(Removed, stack.context)
     }
 
     fun handleAfterSuspendFunctionReturn(continuation: Continuation<*>, call: MethodCall) {
         debug { "handleAfterSuspendFunctionReturn(${continuation.hashCode()}, $call)" }
-        val stack = runningCoroutines[Thread.currentThread()]!!
-        addToBigFuckingMap(continuation, stack)
+        val runningOnCurrentThread = runningOnThread[Thread.currentThread()]!!
+        val stack = runningOnCurrentThread.last()
+        topDoResumeContinuation.remove(stack.topFrameCompletion)
         if (stack.handleSuspendFunctionReturn(continuation, call)) {
-            runningCoroutines.remove(stack.thread)
+            runningOnCurrentThread.dropLastInplace()
+            topDoResumeContinuation[stack.topFrameCompletion] = stack
             fireCallbacks(Suspended, stack.context)
         }
     }
 
     fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, function: DoResumeForSuspend) {
-        debug { "handleDoResumeEnter(${completion.hashCode()}, ${continuation.hashCode()}, $function)" }
-        val stack = bigFuckingMap[completion] ?: bigFuckingMap[continuation]!!
-        val previousStatus = stack.status
-        stack.handleDoResume(completion, continuation, function)
-        addToBigFuckingMap(continuation, stack)
-        runningCoroutines[stack.thread] = stack
-        if (previousStatus != CoroutineStatus.Running) {
-            fireCallbacks(WakedUp, stack.context)
+        debug { "handleDoResumeEnter(compl: ${completion.hashCode()}, cont: ${continuation.hashCode()}, $function)" }
+        if (ignoreDoResumeWithCompletion.remove(completion)) {
+            debug { "ignored" }
+            return
         }
-    }
-
-    private fun addToBigFuckingMap(continuation: Continuation<*>, stack: CoroutineStack) {
-        bigFuckingMap[continuation] = stack
-        bigFuckingReverseMap.getOrPut(stack, { hashSetOf() }).add(continuation)
+        topDoResumeContinuation.remove(continuation)?.let {
+            //first case: coroutine wake up
+            debug { "coroutine waking up" }
+            val previousStatus = it.status
+            topDoResumeContinuation[it.handleDoResume(completion, continuation, function)] = it
+            with(runningOnThread.getOrPut(it.thread, { mutableListOf() })) { if (lastOrNull() != it) add(it) }
+            if (previousStatus != CoroutineStatus.Running)
+                fireCallbacks(WakedUp, it.context)
+            return
+        }
+        initialCompletion[completion]?.let {
+            //second case: first lambda for coroutine
+            debug { "first lambda for coroutine" }
+            topDoResumeContinuation[it.handleDoResume(completion, continuation, function)] = it
+            runningOnThread.getOrPut(it.thread, { mutableListOf() }).add(it)
+            return
+        }
+        //final case: any lambda body call -> do nothing
+        debug { "lambda body call" }
     }
 
     private fun fireCallbacks(event: StackChangedEvent, context: WrappedContext) =
             onChangeCallbacks.forEach { it.invoke(this, event, context) }
+}
+
+private fun MutableList<*>.dropLastInplace() {
+    if (isNotEmpty())
+        removeAt(lastIndex)
 }
 
 //functions called from instrumented(users) code
@@ -99,26 +118,21 @@ object InstrumentedCodeEventsHandler {
     fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) {
         val suspended = result === COROUTINE_SUSPENDED
         val call = allSuspendCalls[functionCallIndex]
-        debug {
-            "suspend call of ${call.method} at ${call.position.file}:${call.position.line} from ${call.fromMethod}, " +
-                    "with ${continuation.hashCode()} : ${if (suspended) "suspended" else "result = $result"}"
-        }
         try {
             if (suspended) {
                 StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
             }
         } catch (e: Exception) {
             error {
-                "handleAfterSuspendCall($result, ${continuation.toStringSafe()}, ${call.method} " +
-                        "at ${call.position.file}:${call.position.line}) exception: ${e.stackTraceToString()}"
+                "handleAfterSuspendCall($result, ${continuation.toStringSafe()}, ${call.method} ${call.position})" +
+                        " exception: ${e.stackTraceToString()}"
             }
         }
     }
 
     @JvmStatic
-    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, doResumeIndex: Int) { //FIXME
+    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, doResumeIndex: Int) {
         val function = doResumeToSuspendFunctions[doResumeIndex]
-        debug { "called doResume ($function) : completion: ${completion.hashCode()}, cont: ${continuation.hashCode()}, context: ${continuation.context}" }
         StacksManager.handleDoResumeEnter(completion, continuation, function)
     }
 }

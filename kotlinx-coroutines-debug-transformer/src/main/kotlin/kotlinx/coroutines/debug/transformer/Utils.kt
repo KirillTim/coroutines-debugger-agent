@@ -1,7 +1,7 @@
 package kotlinx.coroutines.debug.transformer
 
 import kotlinx.coroutines.debug.manager.*
-import org.jetbrains.org.objectweb.asm.Opcodes
+import org.jetbrains.org.objectweb.asm.Opcodes.*
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.*
 import org.jetbrains.org.objectweb.asm.tree.analysis.Analyzer
@@ -27,13 +27,14 @@ internal val AbstractInsnNode?.isGetCOROUTINE_SUSPENDED: Boolean
             && desc == "()${OBJECT_TYPE.descriptor}"
 
 internal val AbstractInsnNode?.isSetLabel: Boolean
-    get() = this is FieldInsnNode && (opcode == Opcodes.PUTSTATIC || opcode == Opcodes.PUTFIELD) && name == "label"
+    get() = this is FieldInsnNode && (opcode == PUTSTATIC || opcode == PUTFIELD) && name == "label"
 
 internal val AbstractInsnNode?.isGetLabel: Boolean
-    get() = this is FieldInsnNode && (opcode == Opcodes.GETFIELD || opcode == Opcodes.GETFIELD) && name == "label"
+    get() = (this is FieldInsnNode && opcode == GETFIELD && name == "label") //anonymous lambda
+            || (this is MethodInsnNode && opcode == INVOKEVIRTUAL && name == "getLabel" && desc == "()I") //named
 
 internal val AbstractInsnNode?.isARETURN: Boolean
-    get() = this != null && opcode == Opcodes.ARETURN
+    get() = this != null && opcode == ARETURN
 
 internal val AbstractInsnNode.isMeaningful: Boolean
     get() = when (type) {
@@ -57,9 +58,9 @@ internal val AbstractInsnNode.previousMeaningful: AbstractInsnNode?
         return cur
     }
 
-internal fun AbstractInsnNode?.isASTORE() = this != null && opcode == Opcodes.ASTORE
+internal fun AbstractInsnNode?.isASTORE() = this != null && opcode == ASTORE
 internal fun AbstractInsnNode?.isALOAD(operand: Int? = null) =
-        this != null && opcode == Opcodes.ALOAD && (operand == null || (this is VarInsnNode && `var` == operand))
+        this != null && opcode == ALOAD && (operand == null || (this is VarInsnNode && `var` == operand))
 
 internal inline fun AbstractInsnNode?.nextMatches(predicate: (AbstractInsnNode) -> Boolean) =
         this?.nextMeaningful?.takeIf(predicate)
@@ -102,10 +103,10 @@ internal val Type.isResumeMethodDesc: Boolean
     get() = returnType == OBJECT_TYPE && argumentTypes.contentEquals(arrayOf(OBJECT_TYPE, THROWABLE_TYPE))
 
 internal val MethodNode.isAbstract: Boolean
-    get() = access and Opcodes.ACC_ABSTRACT != 0
+    get() = access and ACC_ABSTRACT != 0
 
 internal val MethodNode.isBridge: Boolean
-    get() = access and Opcodes.ACC_BRIDGE != 0
+    get() = access and ACC_BRIDGE != 0
 
 internal val MethodNode.isDoResume: Boolean
     get() = name == "doResume" && Type.getType(desc).isResumeMethodDesc && !isAbstract
@@ -135,11 +136,15 @@ internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<Meth
                         || classNode.interfaces.contains(CONTINUATION_TYPE.internalName)) classNode.name
                 else {
                     val fsm = instructions.sequence.firstOrNull { it.isStateMachineStartsHere() }
-                    val getLabel = fsm?.nextMeaningful?.nextMeaningful?.nextMeaningful as? FieldInsnNode
-                    getLabel?.owner
+                    val getLabel = fsm?.nextMeaningful?.nextMeaningful?.nextMeaningful
+                    when (getLabel) {
+                        is FieldInsnNode -> getLabel.owner
+                        is MethodInsnNode -> getLabel.owner
+                        else -> null
+                    }
                 }
         val stackAnalyzer = Analyzer(object : SimpleVerifier() {
-            //getClass is called from isAssignableFrom(..), getSuperClass(..), isInterface(..),
+            //getClass is called from isAssignableFrom(..), getSuperClass(..) and isInterface(..)
             override fun getClass(t: Type?): Class<*>? = null
 
             override fun isInterface(t: Type?) = false
@@ -161,7 +166,7 @@ internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<Meth
 }
 
 internal val AbstractInsnNode.isFunctionInterfaceInvoke: Boolean
-    get() = this is MethodInsnNode && opcode == Opcodes.INVOKEINTERFACE && name == "invoke"
+    get() = this is MethodInsnNode && opcode == INVOKEINTERFACE && name == "invoke"
             && owner.matches("kotlin/jvm/functions/Function(\\d+)".toRegex())
 
 internal fun AbstractInsnNode.isSuspendSignature() = this is MethodInsnNode && isSuspend(name, desc)

@@ -30,6 +30,7 @@ class WrappedCompletion(val completion: Continuation<Any?>?) : Continuation<Any?
                             "${(completionField[completion] as Continuation<*>).hashCode()}, " +
                             "continuation: ${completion.hashCode()}, context: ${completion.context}"
                 }
+                StacksManager.ignoreNextDoResume(completion)
                 return completion
             }
             val wrapped = WrappedCompletion(completion)
