@@ -14,7 +14,7 @@ val DEBUG_AGENT_PACKAGE_PREFIX = "kotlinx.coroutines.debug"
 
 val allSuspendCalls = mutableListOf<SuspendCall>() //TODO concurrency
 
-val allDoResumeCalls = mutableListOf<DoResumeCall>()
+val allDoResumeCalls = mutableListOf<DoResumeCall>() //TODO concurrency
 
 sealed class StackChangedEvent(private val event: String) {
     override fun toString() = event
@@ -115,17 +115,24 @@ private fun MutableList<*>.dropLastInplace() {
 //functions called from instrumented(users) code
 object InstrumentedCodeEventsHandler {
     @JvmStatic
-    fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) {
-        val suspended = result === COROUTINE_SUSPENDED
-        val call = allSuspendCalls[functionCallIndex]
+    fun handleAfterNamedSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) =
+            handleAfterSuspendCall(result, continuation, allSuspendCalls[functionCallIndex])
+
+    @JvmStatic
+    fun handleAfterInvokeSuspendCall(result: Any, continuation: Continuation<*>, lambda: Any, functionCallIndex: Int) {
+        val call = allSuspendCalls[functionCallIndex] as InvokeSuspendCall
+        call.realOwner = lambda.javaClass.name
+        debug { "handleAfterInvokeSuspendCall: ${call.stackTraceElement}" }
+        handleAfterSuspendCall(result, continuation, call)
+    }
+
+    private fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, call: SuspendCall) {
+        if (result !== COROUTINE_SUSPENDED) return
         try {
-            if (suspended) {
-                StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
-            }
+            StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
         } catch (e: Exception) {
             error {
-                "handleAfterSuspendCall($result, ${continuation.toStringSafe()}, ${call.method} ${call.position})" +
-                        " exception: ${e.stackTraceToString()}"
+                "handleAfterSuspendCall(${continuation.toStringSafe()}, $call) exception: ${e.stackTraceToString()}"
             }
         }
     }

@@ -43,7 +43,16 @@ private fun MethodNode.addSuspendCallHandlers(suspendCallsInThisMethod: List<Sus
     suspendCallsInThisMethod.forEach {
         val position = CallPosition(classNode.sourceFile, lines[it.insn] ?: -1)
         allSuspendCalls += it.buildSuspendCall(classNode, position, this)
-        instructions.insert(it.insn, generateAfterSuspendCall(continuationVarIndex, allSuspendCalls.lastIndex))
+        val (index, call) = allSuspendCalls.withIndex().last()
+        when (call) {
+            is NamedFunctionSuspendCall ->
+                instructions.insert(it.insn, generateAfterNamedSuspendCall(continuationVarIndex, index))
+            is InvokeSuspendCall -> {
+                val (before, after) = generateInvokeSuspendCallHandler(this, it.insn, continuationVarIndex, index)
+                instructions.insertBefore(it.insn, before)
+                instructions.insert(it.insn, after)
+            }
+        }
     }
 }
 

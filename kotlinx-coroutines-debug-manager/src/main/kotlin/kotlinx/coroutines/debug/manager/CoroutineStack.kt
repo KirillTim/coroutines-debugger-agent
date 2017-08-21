@@ -71,7 +71,7 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
     var topFrameCompletion: Continuation<*> = initialCompletion //key to find stack for doResume
         private set
     private var topContinuation: Continuation<*> = initialCompletion
-    private val stack = mutableListOf<CoroutineStackFrame>() //FIXME: deque
+    private val stack = mutableListOf<CoroutineStackFrame>()
     private val unAppliedStack = mutableListOf<CoroutineStackFrame>()
 
     fun getSnapshot(): Snapshot = synchronized(this) { Snapshot(name, context, status, thread, stack.map { it.call }) }
