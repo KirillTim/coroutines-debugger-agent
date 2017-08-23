@@ -20,6 +20,7 @@ private data class CoroutineStackFrame(val id: FrameId, val call: MethodCall) {
 
 sealed class WrappedContext(open val context: CoroutineContext) {
     abstract val name: String
+    abstract val additionalInfo: String
     override fun toString() = name
 }
 
@@ -40,6 +41,8 @@ private fun CoroutineContext.getPrettyName(): String {
 
 data class NormalContext(override val context: CoroutineContext) : WrappedContext(context) {
     override val name = context.getPrettyName()
+    override val additionalInfo = "$context"
+    override fun toString() = "NormalContext($context)"
 }
 
 data class SingletonContext private constructor(override val context: CoroutineContext, private val id: Int)
@@ -47,7 +50,8 @@ data class SingletonContext private constructor(override val context: CoroutineC
     constructor(context: CoroutineContext) : this(context, nextId.getAndIncrement())
 
     override val name = "$context #$id"
-
+    override val additionalInfo = ""
+    override fun toString() = "SingletonContext($name)"
     companion object {
         private val nextId = AtomicInteger(0)
     }
@@ -74,22 +78,16 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
     private val stack = mutableListOf<CoroutineStackFrame>()
     private val unAppliedStack = mutableListOf<CoroutineStackFrame>()
 
-    fun getSnapshot(): Snapshot = synchronized(this) { Snapshot(name, context, status, thread, stack.map { it.call }) }
+    fun getSnapshot(): CoroutineSnapshot =
+            synchronized(this) { CoroutineSnapshot(name, context, status, thread, stack.map { it.call }) }
 
     /**
      * @return true if new frames were add to stack, false otherwise
      */
     fun handleSuspendFunctionReturn(completion: Continuation<*>, call: SuspendCall): Boolean {
-        if (call.method.name.endsWith("\$default")) {
-            val (frameId, delegatedCall) =
-                    requireNotNull(unAppliedStack.lastOrNull(), { "can't find delegated call for  $call" })
-            val updatedFrame = CoroutineStackFrame(frameId,
-                    NamedFunctionSuspendCall(delegatedCall.method, delegatedCall.position, delegatedCall.fromMethod))
-            unAppliedStack[unAppliedStack.lastIndex] = updatedFrame
-        }
         unAppliedStack.add(CoroutineStackFrame(CompletionId(completion), call))
         if (completion === topContinuation && (call.fromMethod == stack.first().call.method
-                || call.fromMethod?.name == "doResume" && stack.first().call.method.name == "invoke")) {
+                || call.fromMethod.name == "doResume" && stack.first().call.method.name == "invoke")) {
             applyStack()
             return true
         }
@@ -112,14 +110,14 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
         unAppliedStack.clear()
     }
 
-    fun handleDoResume(completion: Continuation<*>,
-                       continuation: Continuation<*>, function: DoResumeCall): Continuation<*> {
+    fun handleDoResume(completion: Continuation<*>, continuation: Continuation<*>, function: MethodId): Continuation<*> {
         thread = Thread.currentThread()
         status = CoroutineStatus.Running
         if (stack.isEmpty()) {
             require(initialCompletion === completion)
             topContinuation = continuation
-            stack.add(0, CoroutineStackFrame(ContinuationId(continuation), function))
+            stack.add(0, CoroutineStackFrame(ContinuationId(continuation),
+                    DoResumeCall(function, MethodId.UNKNOWN, CallPosition.UNKNOWN)))
             return continuation
         }
         topContinuation = continuation
@@ -135,7 +133,7 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
 /**
  * Remove first [n] elements inplace
  */
-fun MutableList<*>.dropInplace(n: Int) {
+private fun MutableList<*>.dropInplace(n: Int) {
     val resultSize = size - n
     if (resultSize <= 0) clear()
     else

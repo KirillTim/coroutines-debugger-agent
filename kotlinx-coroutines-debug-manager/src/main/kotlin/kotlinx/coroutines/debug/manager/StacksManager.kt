@@ -14,7 +14,7 @@ val DEBUG_AGENT_PACKAGE_PREFIX = "kotlinx.coroutines.debug"
 
 val allSuspendCalls = mutableListOf<SuspendCall>() //TODO concurrency
 
-val allDoResumeCalls = mutableListOf<DoResumeCall>() //TODO concurrency
+val knownDoResumeFunctions = mutableListOf<MethodId>() //TODO concurrency
 
 sealed class StackChangedEvent(private val event: String) {
     override fun toString() = event
@@ -43,7 +43,7 @@ object StacksManager {
 
     fun getSnapshot() = synchronized(this) {
         //TODO: remove lock?
-        return@synchronized stacks.values.map { it.getSnapshot() }.toList()
+        return@synchronized FullCoroutineSnapshot(stacks.values.map { it.getSnapshot() }.toList())
     }
 
     fun ignoreNextDoResume(completion: Continuation<*>) = ignoreDoResumeWithCompletion.add(completion)
@@ -76,7 +76,7 @@ object StacksManager {
         }
     }
 
-    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, function: DoResumeCall) {
+    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, function: MethodId) {
         debug { "handleDoResumeEnter(compl: ${completion.hashCode()}, cont: ${continuation.hashCode()}, $function)" }
         if (ignoreDoResumeWithCompletion.remove(completion)) {
             debug { "ignored" }
@@ -139,5 +139,5 @@ object InstrumentedCodeEventsHandler {
 
     @JvmStatic
     fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, doResumeIndex: Int) =
-            StacksManager.handleDoResumeEnter(completion, continuation, allDoResumeCalls[doResumeIndex])
+            StacksManager.handleDoResumeEnter(completion, continuation, knownDoResumeFunctions[doResumeIndex])
 }

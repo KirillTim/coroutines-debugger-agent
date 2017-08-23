@@ -10,6 +10,7 @@ data class MethodId private constructor(val name: String, val owner: String, val
 
     companion object {
         fun build(name: String, owner: String, desc: String) = MethodId(name, owner.replace('/', '.'), desc)
+        val UNKNOWN = MethodId("unknown", "unknown", "unknown")
     }
 }
 
@@ -23,50 +24,41 @@ data class CallPosition(val file: String, val line: Int) {
 
 sealed class MethodCall(
         open val method: MethodId,
-        open val position: CallPosition,
-        open val fromMethod: MethodId? = null) {
-    abstract val stackTraceElement: StackTraceElement
-    override fun toString() = "$method $position"
+        open val fromMethod: MethodId,
+        open val position: CallPosition) {
+    val stackTraceElement by lazy { StackTraceElement(fromMethod.owner, fromMethod.name, position.file, position.line) }
+    override fun toString() = "${method.name} from $fromMethod $position"
 }
 
 data class DoResumeCall(
         override val method: MethodId,
-        override val position: CallPosition,
-        override val fromMethod: MethodId? = null
-) : MethodCall(method, position, fromMethod) {
-    override val stackTraceElement
-            by lazy { StackTraceElement(method.owner, "invoke", position.file, position.line) }
-
+        override val fromMethod: MethodId,
+        override val position: CallPosition
+) : MethodCall(method, fromMethod, position) {
     override fun toString() = super.toString()
 }
 
 sealed class SuspendCall(
         override val method: MethodId,
-        override val position: CallPosition,
-        override val fromMethod: MethodId? = null
-) : MethodCall(method, position, fromMethod) {
+        override val fromMethod: MethodId,
+        override val position: CallPosition
+) : MethodCall(method, fromMethod, position) {
     override fun toString() = super.toString()
 }
 
 data class NamedFunctionSuspendCall(
         override val method: MethodId,
-        override val position: CallPosition,
-        override val fromMethod: MethodId? = null
-) : SuspendCall(method, position, fromMethod) {
-    override val stackTraceElement
-            by lazy { StackTraceElement(method.owner, method.name, position.file, position.line) }
-
+        override val fromMethod: MethodId,
+        override val position: CallPosition
+) : SuspendCall(method, fromMethod, position) {
     override fun toString() = super.toString()
 }
 
 data class InvokeSuspendCall(
         override val method: MethodId,
+        override val fromMethod: MethodId,
         override val position: CallPosition,
-        override val fromMethod: MethodId?,
         var realOwner: String? = null
-) : SuspendCall(method, position, fromMethod) {
-    override val stackTraceElement
-            by lazy { StackTraceElement(realOwner ?: method.owner, method.name, position.file, position.line) }
-
+) : SuspendCall(method, fromMethod, position) {
     override fun toString() = super.toString()
 }

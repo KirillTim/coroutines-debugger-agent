@@ -209,22 +209,26 @@ internal fun ClassNode.byteCodeString(): String {
 private fun InsnList.methodCallNodeToLabelNode(): Map<MethodInsnNode, LabelNode> {
     val map = mutableMapOf<MethodInsnNode, LabelNode>()
     var lastLabel: LabelNode? = null
-    for (inst in this) {
-        if (inst is MethodInsnNode && lastLabel != null) {
-            map[inst] = lastLabel
-        } else if (inst is LabelNode) {
-            lastLabel = inst
-        }
+    sequence.forEach {
+        if (it is MethodInsnNode && lastLabel != null) map[it] = lastLabel!!
+        if (it is LabelNode) lastLabel = it
     }
     return map
 }
 
-private fun InsnList.labelNodeToLineNumber() =
-        sequence.filterIsInstance<LineNumberNode>().map { it.start to it.line }.toMap()
+private fun InsnList.labelNodeToLineNumber(): Map<LabelNode, Int> {
+    val result = mutableMapOf<LabelNode, Int>()
+    var lastLineNumber: Int? = null
+    sequence.forEach {
+        if (it is LineNumberNode) {
+            lastLineNumber = it.line
+            result[it.start] = it.line
+        }
+        if (it is LabelNode) result[it] = lastLineNumber ?: -1
+    }
+    return result
+}
 
-/*
-* It is possible not to have line number before method call (e.g: inside synthetic bridge)
-* */
 internal fun InsnList.methodCallLineNumber(): Map<MethodInsnNode, Int?> {
     val methodToLabel = methodCallNodeToLabelNode()
     val labelToLineNumber = labelNodeToLineNumber()

@@ -32,9 +32,9 @@ private fun SuspendCallInsnNode.buildSuspendCall(classNode: ClassNode,
                                                  position: CallPosition,
                                                  calledFrom: MethodNode): SuspendCall = when (this) {
     is NamedSuspendCallInsnNode ->
-        NamedFunctionSuspendCall(insn.buildMethodId(), position, calledFrom.buildMethodId(classNode))
+        NamedFunctionSuspendCall(insn.buildMethodId(), calledFrom.buildMethodId(classNode), position)
     is InvokeSuspendCallInsnNode ->
-        InvokeSuspendCall(insn.buildMethodId(), position, calledFrom.buildMethodId(classNode))
+        InvokeSuspendCall(insn.buildMethodId(), calledFrom.buildMethodId(classNode), position)
 }
 
 private fun MethodNode.addSuspendCallHandlers(suspendCallsInThisMethod: List<SuspendCallInsnNode>,
@@ -78,11 +78,8 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
                 "cont: $continuation, isAnonymous: $isAnonymous"
     }
     if (isDoResume) {
-        val doResumeFirstInsnPosition =
-                if (isAnonymous) CallPosition(classNode.sourceFile, firstInstructionLineNumber())
-                else CallPosition.UNKNOWN
-        allDoResumeCalls += DoResumeCall(buildMethodId(classNode), doResumeFirstInsnPosition)
-        instructions.insert(generateHandleDoResumeCallEnter(continuation, allDoResumeCalls.lastIndex))
+        knownDoResumeFunctions += buildMethodId(classNode)
+        instructions.insert(generateHandleDoResumeCallEnter(continuation, knownDoResumeFunctions.lastIndex))
         if (!isAnonymous) return
     }
     val suspendCalls = suspendCallInstructions(classNode)

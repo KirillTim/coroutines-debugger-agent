@@ -92,7 +92,7 @@ fun generateInvokeSuspendCallHandler(currentMethod: MethodNode,
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleDoResumeEnter] with continuation
- * and index of doResume function in [kotlinx.coroutines.debug.manager.allDoResumeCalls] list
+ * and index of doResume function in [kotlinx.coroutines.debug.manager.knownDoResumeFunctions] list
  */
 fun generateHandleDoResumeCallEnter(continuationVarIndex: Int, doResumeIndex: Int) =
         code {

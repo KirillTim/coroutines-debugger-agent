@@ -5,34 +5,34 @@ package kotlinx.coroutines.debug.manager
  */
 
 private fun StackTraceElement.rename() =
-        if (methodName != "doResume") this
-        else StackTraceElement(className, "invoke", fileName, lineNumber)
+        if (methodName == "doResume") StackTraceElement(className, "invoke", fileName, lineNumber)
+        else this
 
-
-data class Snapshot(
+data class CoroutineSnapshot(
         val name: String,
         val context: WrappedContext,
         val status: CoroutineStatus,
         val thread: Thread,
         val coroutineStack: List<MethodCall>) {
     val threadStack = thread.stackTrace.toList()
-    fun coroutineInfo(knownSuspendCalls: Collection<SuspendCall>, knownDoResumeCalls: Collection<DoResumeCall>) =
+    fun coroutineInfo(knownSuspendCalls: Collection<SuspendCall> = allSuspendCalls, //FIXME?
+                      knownDoResumes: Collection<MethodId> = knownDoResumeFunctions) =
             when (status) {
-                CoroutineStatus.Created -> CreatedCoroutineInfo(name, "$context", thread)
+                CoroutineStatus.Created -> CreatedCoroutineInfo(name, context.additionalInfo, thread)
                 CoroutineStatus.Running -> {
-                    val (before, coroutine) = fixThreadStack(threadStack, knownSuspendCalls, knownDoResumeCalls)
-                    RunningCoroutineInfo(name, "$context", thread, before, coroutine)
+                    val (before, coroutine) = fixThreadStack(threadStack, knownSuspendCalls, knownDoResumes)
+                    RunningCoroutineInfo(name, context.additionalInfo, thread, before, coroutine)
                 }
-                CoroutineStatus.Suspended -> SuspendedCoroutineInfo(name, "$context", thread,
-                        coroutineStack.map { it.stackTraceElement.rename() })
+                CoroutineStatus.Suspended -> SuspendedCoroutineInfo(name, context.additionalInfo, thread,
+                        coroutineStack.dropLast(1).map { it.stackTraceElement.rename() })
             }
 
     private fun fixThreadStack(
             threadStack: List<StackTraceElement>,
             knownSuspendCalls: Collection<SuspendCall>,
-            knownDoResumeCalls: Collection<DoResumeCall>): Pair<List<StackTraceElement>, List<StackTraceElement>> {
+            knownDoResumeCalls: Collection<MethodId>): Pair<List<StackTraceElement>, List<StackTraceElement>> {
         val suspendCall: (StackTraceElement) -> Boolean = { ste ->
-            knownSuspendCalls.any { it.stackTraceElement == ste } || knownDoResumeCalls.any { it.method.equalsTo(ste) }
+            knownSuspendCalls.any { it.stackTraceElement == ste } || knownDoResumeCalls.any { it.equalsTo(ste) }
         }
         val stackWithoutTechnicalCalls = threadStack.filter { !it.className.startsWith(DEBUG_AGENT_PACKAGE_PREFIX) }
                 .drop(1) //java.lang.Thread.getStackTrace(Thread.java:1559)
@@ -41,6 +41,20 @@ data class Snapshot(
         val bottom = stackWithoutTechnicalCalls.indexOfLast(suspendCall)
         val fixedPart = stackWithoutTechnicalCalls.subList(top, bottom + 1).filter(suspendCall).map { it.rename() }
         return Pair(stackWithoutTechnicalCalls.drop(bottom + 1), stackWithoutTechnicalCalls.take(top) + fixedPart)
+    }
+}
+
+data class FullCoroutineSnapshot(val coroutines: List<CoroutineSnapshot>) {
+    fun fullCoroutineDump() = FullCoroutineDump(coroutines.map { it.coroutineInfo() })
+}
+
+data class FullCoroutineDump(private val coroutines: List<CoroutineInfo>) {
+    override fun toString() = buildString {
+        append(currentTimePretty("yyyy-MM-dd HH:mm:ss")) //as in thread dump
+        append(" Full coroutine dump\n")
+        coroutines.forEach {
+            append("$it\n")
+        }
     }
 }
 
@@ -69,6 +83,7 @@ data class SuspendedCoroutineInfo(
         override val coroutineStack: List<StackTraceElement>
 ) : CoroutineInfo(name, additionalInfo, thread, CoroutineStatus.Suspended, coroutineStack) {
     override fun toString() = buildString {
+        //FIXME should i print last function name at the first line?
         append(header())
         append(stackToString(coroutineStack))
     }
