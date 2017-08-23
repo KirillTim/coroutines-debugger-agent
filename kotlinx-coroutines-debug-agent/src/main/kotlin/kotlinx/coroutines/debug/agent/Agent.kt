@@ -2,8 +2,10 @@ package kotlinx.coroutines.debug.agent
 
 import kotlinx.coroutines.debug.manager.*
 import kotlinx.coroutines.debug.transformer.CoroutinesDebugTransformer
+import sun.misc.Signal
 import java.io.FileOutputStream
 import java.lang.instrument.Instrumentation
+import java.lang.management.ManagementFactory
 
 /**
  * @author Kirill Timofeev
@@ -26,7 +28,7 @@ class Agent {
         private fun agentSetup(agentArgs: String?, inst: Instrumentation) {
             tryConfigureLogger(agentArgs)
             System.setProperty("kotlinx.coroutines.debug", "")
-            startServerIfNeeded(agentArgs)
+            addSignalHandler(agentArgs)
             if (Logger.config.dataConsumers.isNotEmpty()) {
                 StacksManager.addOnStackChangedCallback { event, coroutineContext ->
                     if (event == Created || event == Suspended || event == Removed)
@@ -44,8 +46,23 @@ class Agent {
     }
 }
 
-private fun startServerIfNeeded(agentArgs: String?) {
-    //TODO
+private fun addSignalHandler(agentArgs: String?) { //FIXME?
+    val signalValue = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("signal=") }?.split('=')?.get(1)
+    val signal = signalValue?.let {
+        try {
+            Signal(it.toUpperCase())
+        } catch (e: Exception) {
+            error { "Unknown signal name '$signalValue' in agent arguments" }
+            null
+        }
+    } ?: Signal("USR2")
+    Signal.handle(signal, {
+        val coroutineDump = StacksManager.getSnapshot().fullCoroutineDump()
+        System.err.println(coroutineDump.toString())
+    })
+    val nameOfRunningVM = ManagementFactory.getRuntimeMXBean().name
+    val pid = nameOfRunningVM.substring(0, nameOfRunningVM.indexOf('@'))
+    info { "Add ${signal.name}(${signal.number}) signal handler, my pid is $pid" }
 }
 
 private fun tryConfigureLogger(agentArgs: String?) {
