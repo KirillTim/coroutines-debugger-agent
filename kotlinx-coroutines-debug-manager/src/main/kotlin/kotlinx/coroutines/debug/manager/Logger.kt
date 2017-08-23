@@ -66,12 +66,11 @@ internal fun LoggerConfig.doLog(withLevel: LogLevel, msg: String) {
 }
 
 @PublishedApi
-internal inline fun build(msg: () -> Any?)
-        = "${prefix()}: ${msg.toStringSafe()}"
+internal inline fun build(msg: () -> Any?) =
+        "${prefix()}: ${msg.toStringSafe()}"
 
 @PublishedApi
-internal fun prefix()
-        = if (Logger.config.withTime) "[${currentTimePretty()}] " else "" +
+internal fun prefix() = if (Logger.config.withTime) "[${currentTimePretty()}] " else "" +
         if (Logger.config.name.isNotEmpty()) "${Logger.config.name}:" else ""
 
 @Suppress("NOTHING_TO_INLINE")
@@ -83,5 +82,5 @@ internal inline fun (() -> Any?).toStringSafe() =
             "Log message invocation failed: $e"
         }
 
-internal fun currentTimePretty(pattern: String = "dd.MM.yyyy HH:mm:ss.SSS")
-        = SimpleDateFormat(pattern).format(Date(System.currentTimeMillis()))
+fun currentTimePretty(pattern: String = "dd.MM.yyyy HH:mm:ss.SSS"): String =
+        SimpleDateFormat(pattern).format(Date(System.currentTimeMillis()))
