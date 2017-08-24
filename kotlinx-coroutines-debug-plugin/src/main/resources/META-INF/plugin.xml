@@ -1,0 +1,28 @@
+<idea-plugin>
+    <id>org.jetbrains.kotlinx.coroutines.debug.plugin</id>
+    <name>Coroutine debug plugin</name>
+    <version>0.1</version>
+    <vendor email="support@jetbrains.com" url="http://www.jetbrains.com">JetBrains</vendor>
+
+    <description>
+        Plugin adds facilities for coroutine debugging: add suspended and running coroutine view
+    </description>
+
+    <idea-version since-build="145.0"/>
+
+    <depends>org.jetbrains.kotlin</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <programRunner implementation="kotlinx.coroutines.debug.plugin.WithAgentDefaultJavaRunner" order="first"/>
+        <programRunner implementation="kotlinx.coroutines.debug.plugin.WithAgentGenericDebuggerRunner" order="first"/>
+    </extensions>
+
+    <actions>
+        <action id="CoroutineDumpAction" class="kotlinx.coroutines.debug.plugin.CoroutineDumpAction"
+                text="Coroutine Dump Action" icon="AllIcons.Actions.Dump">
+            <add-to-group group-id="RunMenu" anchor="last"/>
+        </action>
+
+    </actions>
+
+</idea-plugin>
