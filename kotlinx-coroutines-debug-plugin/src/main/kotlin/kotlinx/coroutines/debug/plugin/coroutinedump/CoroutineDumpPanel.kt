@@ -1,9 +1,15 @@
 package kotlinx.coroutines.debug.plugin.coroutinedump
 
 import com.intellij.codeInsight.highlighting.HighlightManager
+import com.intellij.debugger.impl.DebuggerSession
+import com.intellij.execution.filters.ExceptionFilters
+import com.intellij.execution.filters.TextConsoleBuilderFactory
 import com.intellij.execution.ui.ConsoleView
+import com.intellij.execution.ui.RunnerLayoutUi
+import com.intellij.execution.ui.layout.impl.RunnerContentUi
 import com.intellij.icons.AllIcons
 import com.intellij.ide.DataManager
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.colors.EditorColors
@@ -13,6 +19,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Splitter
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.wm.IdeFocusManager
 import com.intellij.ui.*
 import com.intellij.ui.components.JBList
@@ -100,6 +107,45 @@ class CoroutineDumpPanel(project: Project,
     }
 
     companion object {
+        fun attach(
+                project: Project,
+                coroutineStates: List<CoroutineState>,
+                ui: RunnerLayoutUi,
+                session: DebuggerSession
+        ) {
+            val consoleBuilder = TextConsoleBuilderFactory.getInstance().createBuilder(project).apply {
+                filters(ExceptionFilters.getFilters(session.searchScope))
+            }
+            val consoleView = consoleBuilder.console.apply { allowHeavyFilters() }
+            val toolbarActions = DefaultActionGroup()
+            val panel = CoroutineDumpPanel(project, consoleView, toolbarActions, coroutineStates)
+
+            val id = "$COROUTINE_DUMP_CONTENT_PREFIX #${currentCoroutineDumpId}"
+            val content = ui.createContent(id, panel, id, null, null).apply {
+                putUserData(RunnerContentUi.LIGHTWEIGHT_CONTENT_MARKER, java.lang.Boolean.TRUE)
+                isCloseable = true
+                description = "Coroutine Dump"
+            }
+            ui.addContent(content)
+            ui.selectAndFocus(content, true, true)
+            coroutineDumpsCount++
+            currentCoroutineDumpId++
+            Disposer.register(content, Disposable {
+                coroutineDumpsCount--
+                if (coroutineDumpsCount == 0) {
+                    currentCoroutineDumpId = 1
+                }
+            })
+            Disposer.register(content, consoleView)
+            ui.selectAndFocus(content, true, false)
+            if (coroutineStates.isNotEmpty())
+                panel.selectCoroutine(0)
+        }
+
+        private val COROUTINE_DUMP_CONTENT_PREFIX = "Coroutine Dump"
+        private var currentCoroutineDumpId = 1
+        private var coroutineDumpsCount = 0
+
         private val RUNNING_ICON = AllIcons.Debugger.ThreadStates.Running
         private val SUSPENDED_ICON = AllIcons.Debugger.ThreadStates.Paused
         private fun coroutineStateIcon(coroutine: CoroutineState) = //TODO sealed classes
@@ -140,9 +186,11 @@ class CoroutineDumpPanel(project: Project,
         }
     }
 
-    private inner class FilterAction
-        : ToggleAction("Filter", "Show only coroutines containing a specific string", AllIcons.General.Filter), DumbAware {
-
+    private inner class FilterAction : ToggleAction(
+            "Filter",
+            "Show only coroutines containing a specific string",
+            AllIcons.General.Filter
+    ), DumbAware {
         override fun isSelected(event: AnActionEvent) = filterPanel.isVisible
 
         override fun setSelected(e: AnActionEvent, state: Boolean) {
@@ -191,8 +239,12 @@ class CoroutineDumpPanel(project: Project,
     }
 
     private class CoroutineListCellRenderer : ColoredListCellRenderer<CoroutineState>() {
-        override fun customizeCellRenderer(list: JList<out CoroutineState>, coroutineState: CoroutineState, index: Int,
-                                           selected: Boolean, hasFocus: Boolean) {
+        override fun customizeCellRenderer(list: JList<out CoroutineState>,
+                                           coroutineState: CoroutineState,
+                                           index: Int,
+                                           selected: Boolean,
+                                           hasFocus: Boolean
+        ) {
             icon = coroutineStateIcon(coroutineState)
             if (!selected) background = UIUtil.getListBackground()
             val attrs = getAttributes(coroutineState)

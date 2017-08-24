@@ -2,6 +2,10 @@ plugins {
     id 'org.jetbrains.intellij' version '0.2.16'
 }
 
+dependencies {
+    compile files("${System.properties.'java.home'}/../lib/tools.jar") //FIXME!!!
+}
+
 intellij {
     pluginName 'Kotlin Coroutine Debugger'
     localPath '/home/user/.local/share/JetBrains/Toolbox/apps/IDEA-U/ch-0/172.3544.35'
