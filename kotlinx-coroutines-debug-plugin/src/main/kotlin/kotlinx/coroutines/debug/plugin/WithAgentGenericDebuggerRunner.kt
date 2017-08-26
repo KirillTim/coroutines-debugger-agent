@@ -10,12 +10,10 @@ import com.intellij.execution.ui.RunContentDescriptor
  * @author Kirill Timofeev
  */
 class WithAgentGenericDebuggerRunner : GenericDebuggerRunner() {
-    private val AGENT_PATH = "/home/user/Desktop/kotlinx.coroutines.debug/kotlinx-coroutines-debug-agent/build/libs/coroutines-debug-agent.jar"
-    private val AGENT_PARAMS = "loglevel=info,datafile="
 
     override fun doExecute(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? {
         val javaCmdState = state as? BaseJavaApplicationCommandLineState<*>
-        javaCmdState?.getJavaParameters()?.vmParametersList?.add("-javaagent:$AGENT_PATH=$AGENT_PARAMS")
+        javaCmdState?.getJavaParameters()?.vmParametersList?.add(PathUtil.JAVAAGENT_VM_PARAM)
         println("debugger runner with $javaCmdState")
         return super.doExecute(state, environment)
     }
