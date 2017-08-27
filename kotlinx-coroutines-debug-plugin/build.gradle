@@ -8,10 +8,11 @@ dependencies {
 
 intellij {
     pluginName 'Kotlin Coroutine Debugger'
-    localPath '/home/kirill/.local/share/JetBrains/Toolbox/apps/IDEA-U/ch-0/172.3544.35'
+    localPath '/home/user/.local/share/JetBrains/Toolbox/apps/IDEA-U/ch-0/172.3544.35'
     plugins = ['org.jetbrains.kotlin:1.1.4-release-IJ2017.2-2']
 }
 
-prepareSandbox { //FIXME: add depends on?
+prepareSandbox.dependsOn project(":kotlinx-coroutines-debug-agent").tasks.build
+prepareSandbox {
     from('../kotlinx-coroutines-debug-agent/build/libs/') { into "${intellij.pluginName}/agent/" }
 }

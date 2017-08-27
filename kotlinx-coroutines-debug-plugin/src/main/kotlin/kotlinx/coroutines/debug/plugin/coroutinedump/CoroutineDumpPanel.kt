@@ -36,10 +36,11 @@ import javax.swing.event.DocumentEvent
 /**
  * @see [com.intellij.unscramble.ThreadDumpPanel]
  */
-class CoroutineDumpPanel(project: Project,
-                         consoleView: ConsoleView,
-                         toolbarActions: DefaultActionGroup,
-                         private val coroutineDump: List<CoroutineState>
+class CoroutineDumpPanel(
+        project: Project,
+        consoleView: ConsoleView,
+        toolbarActions: DefaultActionGroup,
+        private val coroutineDump: List<CoroutineState>
 ) : JPanel(BorderLayout()) {
     private val coroutineList = JBList(DefaultListModel<CoroutineState>()).apply {
         cellRenderer = CoroutineListCellRenderer()
@@ -53,6 +54,7 @@ class CoroutineDumpPanel(project: Project,
     private val filterField = SearchTextField().apply {
         addDocumentListener(object : DocumentAdapter() {
             override fun textChanged(event: DocumentEvent) {
+                updateCoroutineList()
             }
         })
     }
@@ -130,10 +132,12 @@ class CoroutineDumpPanel(project: Project,
             ui.selectAndFocus(content, true, true)
             coroutineDumpsCount++
             currentCoroutineDumpId++
-            Disposer.register(content, Disposable {
-                coroutineDumpsCount--
-                if (coroutineDumpsCount == 0) {
-                    currentCoroutineDumpId = 1
+            Disposer.register(content, object : Disposable { //TODO report bug: called not every time if converted to lambda
+                override fun dispose() {
+                    coroutineDumpsCount--
+                    if (coroutineDumpsCount == 0) {
+                        currentCoroutineDumpId = 1
+                    }
                 }
             })
             Disposer.register(content, consoleView)
@@ -146,14 +150,8 @@ class CoroutineDumpPanel(project: Project,
         private var currentCoroutineDumpId = 1
         private var coroutineDumpsCount = 0
 
-        private val RUNNING_ICON = AllIcons.Debugger.ThreadStates.Running
-        private val SUSPENDED_ICON = AllIcons.Debugger.ThreadStates.Paused
-        private fun coroutineStateIcon(coroutine: CoroutineState) = //TODO sealed classes
-                if (coroutine.state == "Running") RUNNING_ICON
-                else SUSPENDED_ICON
-
         private fun getAttributes(coroutine: CoroutineState) =
-                if (coroutine.state == "Running") SimpleTextAttributes.REGULAR_ATTRIBUTES
+                if (coroutine.status == Running) SimpleTextAttributes.REGULAR_ATTRIBUTES
                 else SimpleTextAttributes.GRAY_ATTRIBUTES
 
         private val TYPE_LABEL = "Sort threads by type"
@@ -162,9 +160,9 @@ class CoroutineDumpPanel(project: Project,
 
     private inner class SortCoroutinesAction : DumbAwareAction(TYPE_LABEL) {
         private val BY_TYPE: (CoroutineState, CoroutineState) -> Int = { o1, o2 ->
-            if (o1.stateCode == o2.stateCode) o1.name.compareTo(o2.name, ignoreCase = true)
+            if (o1.status.code == o2.status.code) o1.name.compareTo(o2.name, ignoreCase = true)
             else {
-                if (o1.stateCode < o2.stateCode) -1 else 1
+                if (o1.status.code < o2.status.code) -1 else 1
             }
         }
         private val BY_NAME: (CoroutineState, CoroutineState) -> Int =
@@ -245,11 +243,13 @@ class CoroutineDumpPanel(project: Project,
                                            selected: Boolean,
                                            hasFocus: Boolean
         ) {
-            icon = coroutineStateIcon(coroutineState)
+            icon = coroutineState.status.icon
             if (!selected) background = UIUtil.getListBackground()
             val attrs = getAttributes(coroutineState)
             append(coroutineState.name + " (", attrs)
-            var detail = coroutineState.state //TODO: add info about thread
+            var detail = coroutineState.status.name
+            if (coroutineState.additionalInfo.isNotEmpty())
+                detail += " " + coroutineState.additionalInfo
             if (detail.length > 30) detail = detail.substring(0, 30) + "..."
             append(detail, attrs)
             append(")", attrs)

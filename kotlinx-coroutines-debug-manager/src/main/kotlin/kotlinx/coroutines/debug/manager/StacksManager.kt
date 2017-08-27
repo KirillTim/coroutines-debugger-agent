@@ -41,10 +41,17 @@ object StacksManager {
 
     fun removeOnStackChangedCallback(callback: OnStackChangedCallback) = onChangeCallbacks.remove(callback)
 
-    fun getSnapshot() = synchronized(this) {
+    @JvmStatic
+    fun getSnapshot() = //synchronized(this) {
         //TODO: remove lock?
-        return@synchronized FullCoroutineSnapshot(stacks.values.map { it.getSnapshot() }.toList())
-    }
+            /*return@synchronized*/ FullCoroutineSnapshot(stacks.values.map { it.getSnapshot() }.toList())
+    //}
+
+    /**
+     * Should only be called from debugger inside idea plugin
+     */
+    @JvmStatic
+    fun getFullDumpString() = getSnapshot().fullCoroutineDump().toString()
 
     fun ignoreNextDoResume(completion: Continuation<*>) = ignoreDoResumeWithCompletion.add(completion)
 

@@ -19,7 +19,7 @@
 
     <actions>
         <action id="CoroutineDumpAction" class="kotlinx.coroutines.debug.plugin.CoroutineDumpAction"
-                text="Coroutine Dump Action" icon="AllIcons.Actions.Dump">
+                text="Get coroutine dump" icon="AllIcons.Actions.Dump">
             <add-to-group group-id="RunMenu" anchor="last"/>
         </action>
 
