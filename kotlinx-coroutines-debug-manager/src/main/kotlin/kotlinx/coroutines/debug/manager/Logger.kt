@@ -25,8 +25,12 @@ data class LogConsumer(val level: LogLevel, val consumerWriter: PrintWriter) {
     constructor(level: LogLevel, consumerStream: OutputStream) : this(level, PrintWriter(consumerStream, true))
 }
 
-fun logToFile(level: LogLevel, name: String = "", withTime: Boolean = false,
-              logFileOutputStream: FileOutputStream, dataConsumers: List<OutputStream> = emptyList()
+fun logToFile(
+        level: LogLevel,
+        name: String = "",
+        withTime: Boolean = false,
+        logFileOutputStream: FileOutputStream,
+        dataConsumers: List<OutputStream> = emptyList()
 ): LoggerConfig {
     val logConsumer = LogConsumer(level, logFileOutputStream)
     return LoggerConfig(level, name, withTime, listOf(logConsumer), dataConsumers)
@@ -37,7 +41,8 @@ class LoggerConfig(
         val name: String = "",
         val withTime: Boolean = false,
         val consumers: List<LogConsumer> = listOf(LogConsumer(LogLevel.DEBUG, System.err)),
-        dataConsumers: List<OutputStream> = listOf(System.err)) {
+        dataConsumers: List<OutputStream> = listOf(System.err)
+) {
     val dataConsumers = dataConsumers.toHashSet().map { PrintWriter(it, true) }
 }
 
@@ -66,12 +71,13 @@ internal fun LoggerConfig.doLog(withLevel: LogLevel, msg: String) {
 }
 
 @PublishedApi
-internal inline fun build(msg: () -> Any?) =
-        "${prefix()}: ${msg.toStringSafe()}"
+internal inline fun build(msg: () -> Any?) = "${prefix()}: ${msg.toStringSafe()}"
 
 @PublishedApi
-internal fun prefix() = if (Logger.config.withTime) "[${currentTimePretty()}] " else "" +
-        if (Logger.config.name.isNotEmpty()) "${Logger.config.name}:" else ""
+internal fun prefix() = buildString {
+    if (Logger.config.withTime) append("[${currentTimePretty()}] ") else append("")
+    if (Logger.config.name.isNotEmpty()) append("${Logger.config.name}:") else append("")
+}
 
 @Suppress("NOTHING_TO_INLINE")
 @PublishedApi

@@ -28,17 +28,21 @@ private fun MethodNode.findContinuationVarIndex(classNode: ClassNode): Int {
     return argumentVarIndex(Type.getArgumentTypes(desc), continuationArgIndex) + if (isStatic) 0 else 1
 }
 
-private fun SuspendCallInsnNode.buildSuspendCall(classNode: ClassNode,
-                                                 position: CallPosition,
-                                                 calledFrom: MethodNode): SuspendCall = when (this) {
+private fun SuspendCallInsnNode.buildSuspendCall(
+        classNode: ClassNode,
+        position: CallPosition,
+        calledFrom: MethodNode
+): SuspendCall = when (this) {
     is NamedSuspendCallInsnNode ->
         NamedFunctionSuspendCall(insn.buildMethodId(), calledFrom.buildMethodId(classNode), position)
     is InvokeSuspendCallInsnNode ->
         InvokeSuspendCall(insn.buildMethodId(), calledFrom.buildMethodId(classNode), position)
 }
 
-private fun MethodNode.addSuspendCallHandlers(suspendCallsInThisMethod: List<SuspendCallInsnNode>,
-                                              continuationVarIndex: Int, classNode: ClassNode) {
+private fun MethodNode.addSuspendCallHandlers(
+        suspendCallsInThisMethod: List<SuspendCallInsnNode>,
+        continuationVarIndex: Int, classNode: ClassNode
+) {
     val lines = instructions.methodCallLineNumber()
     suspendCallsInThisMethod.forEach {
         val position = CallPosition(classNode.sourceFile, lines[it.insn] ?: -1)
@@ -91,8 +95,13 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
 }
 
 class CoroutinesDebugTransformer : ClassFileTransformer {
-    override fun transform(loader: ClassLoader?, className: String?, classBeingRedefined: Class<*>?,
-                           protectionDomain: ProtectionDomain?, classfileBuffer: ByteArray?): ByteArray {
+    override fun transform(
+            loader: ClassLoader?,
+            className: String?,
+            classBeingRedefined: Class<*>?,
+            protectionDomain: ProtectionDomain?,
+            classfileBuffer: ByteArray?
+    ): ByteArray {
         if (className?.startsWith(DEBUG_AGENT_PACKAGE_PREFIX) == true && classfileBuffer != null) return classfileBuffer
         val reader = ClassReader(classfileBuffer)
         val classNode = ClassNode()
@@ -104,7 +113,7 @@ class CoroutinesDebugTransformer : ClassFileTransformer {
                 val message = "while instrumenting $className.${method.name} with desc: ${method.desc} " +
                         "exception : ${e.stackTraceToString()}"
                 error { message }
-                debug { message + "\nbyte code: ${classNode.byteCodeString()}" }
+                debug { message + "\nbytecode: ${classNode.byteCodeString()}" }
             }
         }
         val writer = ClassWriter(ClassWriter.COMPUTE_MAXS)

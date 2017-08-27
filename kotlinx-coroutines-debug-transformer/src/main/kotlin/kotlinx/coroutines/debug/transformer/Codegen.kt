@@ -79,9 +79,12 @@ private fun generateStoreLambdaObjectFromStack(firstIndex: Int, stackSize: Int):
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleAfterInvokeSuspendCall]
  * with continuation, lambda object and index of function call from [kotlinx.coroutines.debug.manager.allSuspendCalls] list
  */
-fun generateInvokeSuspendCallHandler(currentMethod: MethodNode,
-                                     invokeInsn: MethodInsnNode,
-                                     continuationVarIndex: Int, functionCallIndex: Int): Pair<InsnList, InsnList> {
+fun generateInvokeSuspendCallHandler(
+        currentMethod: MethodNode,
+        invokeInsn: MethodInsnNode,
+        continuationVarIndex: Int,
+        functionCallIndex: Int
+): Pair<InsnList, InsnList> {
     val firstIndex = currentMethod.instructions.sequence
             .filter { it.isASTORE() }.filterIsInstance<VarInsnNode>().map { it.`var` }.max()!! + 1
     val stackSize = Type.getType(invokeInsn.desc).argumentTypes.size

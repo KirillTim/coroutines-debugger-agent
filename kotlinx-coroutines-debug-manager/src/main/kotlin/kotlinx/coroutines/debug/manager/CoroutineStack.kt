@@ -52,6 +52,7 @@ data class SingletonContext private constructor(override val context: CoroutineC
     override val name = "$context #$id"
     override val additionalInfo = ""
     override fun toString() = "SingletonContext($name)"
+
     companion object {
         private val nextId = AtomicInteger(0)
     }
@@ -110,7 +111,11 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
         unAppliedStack.clear()
     }
 
-    fun handleDoResume(completion: Continuation<*>, continuation: Continuation<*>, function: MethodId): Continuation<*> {
+    fun handleDoResume(
+            completion: Continuation<*>,
+            continuation: Continuation<*>,
+            function: MethodId
+    ): Continuation<*> {
         thread = Thread.currentThread()
         status = CoroutineStatus.Running
         if (stack.isEmpty()) {
