@@ -27,6 +27,8 @@ object WakedUp : StackChangedEvent("WakedUp")
 
 typealias OnStackChangedCallback = StacksManager.(StackChangedEvent, WrappedContext) -> Unit
 
+val exceptions = CopyOnWriteArrayList<Exception>() //for tests and debug
+
 object StacksManager {
     private val stacks = ConcurrentHashMap<WrappedContext, CoroutineStack>()
     private val topDoResumeContinuation = ConcurrentHashMap<Continuation<*>, CoroutineStack>()
@@ -138,6 +140,7 @@ object InstrumentedCodeEventsHandler {
         try {
             StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
         } catch (e: Exception) {
+            exceptions.add(e)
             error {
                 "handleAfterSuspendCall(${continuation.toStringSafe()}, $call) exception: ${e.stackTraceToString()}"
             }

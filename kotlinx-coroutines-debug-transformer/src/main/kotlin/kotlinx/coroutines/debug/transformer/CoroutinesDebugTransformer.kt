@@ -110,6 +110,7 @@ class CoroutinesDebugTransformer : ClassFileTransformer {
             try {
                 method.transformMethod(classNode)
             } catch (e: Exception) {
+                exceptions.add(e)
                 val message = "while instrumenting $className.${method.name} with desc: ${method.desc} " +
                         "exception : ${e.stackTraceToString()}"
                 error { message }
