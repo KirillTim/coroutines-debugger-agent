@@ -100,7 +100,7 @@ data class RunningCoroutineInfo(
         append(header())
         append(stackToString(coroutineStack))
         append("    -  coroutine started\n")
-        //append(stackToString(stackBeforeCoroutine)) FIXME: uncomment
+        append(stackToString(stackBeforeCoroutine))
     }
 }
 
