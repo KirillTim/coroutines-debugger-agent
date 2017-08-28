@@ -170,9 +170,13 @@ internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<Susp
     return suspensionCalls
 }
 
+private val FUNCTION_REGEX = "kotlin/jvm/functions/Function(\\d+)".toRegex()
+
 internal val AbstractInsnNode.isFunctionInterfaceInvoke: Boolean
-    get() = this is MethodInsnNode && opcode == INVOKEINTERFACE && name == "invoke"
-            && owner.matches("kotlin/jvm/functions/Function(\\d+)".toRegex())
+    get() {
+        return this is MethodInsnNode && opcode == INVOKEINTERFACE && name == "invoke"
+            && owner.matches(FUNCTION_REGEX)
+    }
 
 internal fun AbstractInsnNode.isSuspendSignature() = this is MethodInsnNode && isSuspend(name, desc)
 
@@ -190,7 +194,7 @@ internal fun prettyPrint(method: MethodId, argumentValues: List<Any>? = null): S
     val arguments = argumentValues?.joinToString() ?:
             descType.argumentTypes.joinToString(transform = { it.className.split('.').last() })
     val returnType = descType.returnType.className.split('.').last()
-    return "${method.owner.replace('/', '.')}.${method.name}($arguments): $returnType"
+    return "${method.className.replace('/', '.')}.${method.name}($arguments): $returnType"
 }
 
 internal fun MethodInsnNode.buildMethodId() = MethodId.build(name, owner, desc)

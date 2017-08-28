@@ -8,7 +8,7 @@ dependencies {
 
 intellij {
     pluginName 'Kotlin Coroutine Debugger'
-    localPath '/home/user/.local/share/JetBrains/Toolbox/apps/IDEA-U/ch-0/172.3544.35'
+//    localPath '/Users/jetbrains/Library/Application Support/JetBrains/Toolbox/apps/IDEA-U/ch-0/172.3757.52/IntelliJ IDEA.app/Contents/Resources'
     plugins = ['org.jetbrains.kotlin:1.1.4-release-IJ2017.2-2']
 }
 
