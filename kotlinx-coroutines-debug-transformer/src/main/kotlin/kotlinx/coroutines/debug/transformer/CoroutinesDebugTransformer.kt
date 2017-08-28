@@ -46,8 +46,8 @@ private fun MethodNode.addSuspendCallHandlers(
     val lines = instructions.methodCallLineNumber()
     suspendCallsInThisMethod.forEach {
         val position = CallPosition(classNode.sourceFile, lines[it.insn] ?: -1)
-        allSuspendCalls += it.buildSuspendCall(classNode, position, this)
-        val (index, call) = allSuspendCalls.withIndex().last()
+        val call = it.buildSuspendCall(classNode, position, this)
+        val index = allSuspendCalls.appendWithIndex(call)
         when (call) {
             is NamedFunctionSuspendCall ->
                 instructions.insert(it.insn, generateAfterNamedSuspendCall(continuationVarIndex, index))
@@ -82,8 +82,8 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
                 "cont: $continuation, isAnonymous: $isAnonymous"
     }
     if (isDoResume) {
-        knownDoResumeFunctions += buildMethodId(classNode)
-        instructions.insert(generateHandleDoResumeCallEnter(continuation, knownDoResumeFunctions.lastIndex))
+        val index = knownDoResumeFunctions.appendWithIndex(buildMethodId(classNode))
+        instructions.insert(generateHandleDoResumeCallEnter(continuation, index))
         if (!isAnonymous) return
     }
     val suspendCalls = suspendCallInstructions(classNode)

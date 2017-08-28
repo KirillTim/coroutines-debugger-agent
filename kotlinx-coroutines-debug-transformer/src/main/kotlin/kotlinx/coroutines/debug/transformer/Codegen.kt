@@ -13,7 +13,7 @@ private val COMPLETION_WRAPPER_CLASS_NAME = "kotlinx/coroutines/debug/manager/Wr
 private val WRAP_COMPLETION = "maybeWrapCompletionAndCreateNewCoroutine"
 private val MANAGER_CLASS_NAME = "kotlinx/coroutines/debug/manager/InstrumentedCodeEventsHandler"
 private val AFTER_NAMED_SUSPEND_CALL = "handleAfterNamedSuspendCall"
-private val AFTER_INVOKE_SUSPEND_CALL = "handleAfterInvokeSuspendCall"
+private val AFTER_INVOKE_SUSPEND_CALL = "handleAfterInvokeSuspendCall" // todo: remove, use handleAfterNamedSuspendCall
 private val DO_RESUME_ENTER = "handleDoResumeEnter"
 
 internal inline fun code(block: InstructionAdapter.() -> Unit): InsnList =
@@ -40,6 +40,7 @@ fun generateAfterNamedSuspendCall(continuationVarIndex: Int, functionCallIndex: 
                     "(${OBJECT_TYPE.descriptor}${CONTINUATION_TYPE.descriptor}I)V", false)
         }
 
+// todo: remove, use generateAfterNamedSuspendCall
 private fun generateAfterInvokeSuspendCall(lambdaVarIndex: Int, continuationVarIndex: Int, functionCallIndex: Int) =
         code {
             dup()

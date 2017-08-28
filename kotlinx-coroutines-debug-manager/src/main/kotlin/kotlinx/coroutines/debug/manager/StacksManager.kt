@@ -12,9 +12,9 @@ import kotlin.coroutines.experimental.intrinsics.COROUTINE_SUSPENDED
 
 val DEBUG_AGENT_PACKAGE_PREFIX = "kotlinx.coroutines.debug"
 
-val allSuspendCalls = mutableListOf<SuspendCall>() //TODO concurrency
+val allSuspendCalls = AppendOnlyThreadSafeList<SuspendCall>()
 
-val knownDoResumeFunctions = mutableListOf<MethodId>() //TODO concurrency
+val knownDoResumeFunctions = AppendOnlyThreadSafeList<MethodId>()
 
 sealed class StackChangedEvent(private val event: String) {
     override fun toString() = event
@@ -127,11 +127,11 @@ object InstrumentedCodeEventsHandler {
     fun handleAfterNamedSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) =
             handleAfterSuspendCall(result, continuation, allSuspendCalls[functionCallIndex])
 
+    // todo: remove, use regular handleAfterNamedSuspendCall
     @JvmStatic
     fun handleAfterInvokeSuspendCall(result: Any, continuation: Continuation<*>, lambda: Any, functionCallIndex: Int) {
-        val call = allSuspendCalls[functionCallIndex] as InvokeSuspendCall
-        call.realOwner = lambda.javaClass.name
-        debug { "handleAfterInvokeSuspendCall: ${call.stackTraceElement}" }
+        val staticCall = allSuspendCalls[functionCallIndex] as InvokeSuspendCall
+        val call = staticCall.copy(realOwner = lambda.javaClass.name)
         handleAfterSuspendCall(result, continuation, call)
     }
 
