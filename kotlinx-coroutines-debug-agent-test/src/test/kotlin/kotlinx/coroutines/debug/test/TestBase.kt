@@ -1,4 +1,4 @@
-package example
+package kotlinx.coroutines.debug.test
 
 import com.sun.tools.attach.VirtualMachine
 import kotlinx.coroutines.debug.manager.*
@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicReference
 sealed class CoroutineId
 
 data class Id(val id: Int) : CoroutineId() {
-    override fun toString() = "coroutine #$id"
+    override fun toString() = "coroutine#$id"
 }
 
 data class Name(val name: String) : CoroutineId() {
@@ -190,7 +190,7 @@ open class TestBase {
     companion object {
         var LOG_LEVEL = "debug"
         private val AGENT_JAR_PATH = "../kotlinx-coroutines-debug-agent/build/libs/coroutines-debug-agent.jar"
-        private val AGENT_ARGUMENTS = "loglevel=$LOG_LEVEL,datafile=data.all" // "datafile=" to suppress data output
+        private val AGENT_ARGUMENTS = "loglevel=${LOG_LEVEL},datafile=data.all" // "datafile=" to suppress data output
 
         @BeforeClass
         @JvmStatic

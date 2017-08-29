@@ -3,14 +3,16 @@ package kotlinx.coroutines.debug.manager
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.CoroutineContext
-import kotlin.coroutines.experimental.EmptyCoroutineContext
 
-private sealed class FrameId(open val value: Continuation<*>)
-private data class ContinuationId(override val value: Continuation<*>) : FrameId(value) {
+private sealed class FrameId {
+    abstract val value: Continuation<*>
+}
+
+private data class ContinuationId(override val value: Continuation<*>) : FrameId() {
     override fun toString() = "Continuation(${value.hashCode()})"
 }
 
-private data class CompletionId(override val value: Continuation<*>) : FrameId(value) {
+private data class CompletionId(override val value: Continuation<*>) : FrameId() {
     override fun toString() = "Completion(${value.hashCode()})"
 }
 
@@ -18,44 +20,28 @@ private data class CoroutineStackFrame(val id: FrameId, val call: MethodCall) {
     override fun toString() = "$id, $call"
 }
 
-sealed class WrappedContext(open val context: CoroutineContext) {
-    abstract val name: String
-    abstract val additionalInfo: String
+data class WrappedContext(val name: String, val context: CoroutineContext, val additionalInfo: String? = null) {
     override fun toString() = name
+
+    companion object {
+        private val nextGeneratedId = AtomicInteger(0)
+        fun fromContextWithoutId(context: CoroutineContext) =
+                WrappedContext("$context$${nextGeneratedId.getAndIncrement()}", context, "")
+    }
 }
 
-private fun CoroutineContext.isSingleton() = this is EmptyCoroutineContext
-
-private fun CoroutineContext.wrap() = if (isSingleton()) SingletonContext(this) else NormalContext(this)
-
-private fun CoroutineContext.getPrettyName(): String {
+private fun CoroutineContext.tryGetNameAndId(): Pair<String?, Int>? {
     val parts = "$this".drop(1).dropLast(1).split(", ").map {
         val firstParenthesis = it.indexOf('(')
         if (firstParenthesis == -1) it to ""
         else it.take(firstParenthesis) to it.drop(firstParenthesis + 1).dropLast(1)
     }.toMap()
-    val name = parts["CoroutineName"] ?: "coroutine"
-    val id = parts["CoroutineId"]
-    return "$name #$id"
+    return parts["CoroutineId"]?.let { Pair(parts["CoroutineName"], it.toInt()) }
 }
 
-data class NormalContext(override val context: CoroutineContext) : WrappedContext(context) {
-    override val name = context.getPrettyName()
-    override val additionalInfo = "$context"
-    override fun toString() = "NormalContext($context)"
-}
-
-data class SingletonContext private constructor(override val context: CoroutineContext, private val id: Int)
-    : WrappedContext(context) {
-    constructor(context: CoroutineContext) : this(context, nextId.getAndIncrement())
-
-    override val name = "$context #$id"
-    override val additionalInfo = ""
-    override fun toString() = "SingletonContext($name)"
-
-    companion object {
-        private val nextId = AtomicInteger(0)
-    }
+private fun CoroutineContext.wrap(): WrappedContext {
+    val (name, id) = tryGetNameAndId() ?: return WrappedContext.fromContextWithoutId(this)
+    return WrappedContext("${name ?: "coroutine"}#$id", this)
 }
 
 sealed class CoroutineStatus(private val status: String) {
