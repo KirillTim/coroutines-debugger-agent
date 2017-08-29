@@ -1,4 +1,4 @@
-package example
+package kotlinx.coroutines.debug.test
 
 import org.junit.Assert
 import org.junit.Test
@@ -47,8 +47,8 @@ class GeneratorsTest : TestBase() {
     fun simpleGeneratorTest() {
         val N = 10
         (1..N).forEach {
-            TestBase.expectNextSuspendedState(suspended(Name("EmptyCoroutineContext #0"),
-                    method("example.GeneratorsTestMethods\$repeatA\$1.invoke")))
+            expectNextSuspendedState(suspended(Name("EmptyCoroutineContext$0"),
+                    method("kotlinx.coroutines.debug.test.GeneratorsTestMethods\$repeatA\$1.invoke")))
         }
         Assert.assertEquals(GeneratorsTestMethods.repeatA().take(N).toList(), (1..N).map { 'a' }.toList())
     }
@@ -56,25 +56,26 @@ class GeneratorsTest : TestBase() {
     @Test
     fun twoGeneratorsTest() {
         val N = 2
-        TestBase.expectNextSuspendedState(
-                suspended(Name("EmptyCoroutineContext #0"),
-                        method("example.GeneratorsTestMethods\$repeatA\$1.invoke")))
+        expectNextSuspendedState(
+                suspended(Name("EmptyCoroutineContext$0"),
+                        method("kotlinx.coroutines.debug.test.GeneratorsTestMethods\$repeatA\$1.invoke")))
         val stateTwoGenerators = arrayOf<ExpectedCoroutineState>(
-                suspended(Name("EmptyCoroutineContext #0"),
-                        method("example.GeneratorsTestMethods\$repeatA\$1.invoke")),
-                suspended(Name("EmptyCoroutineContext #1"),
-                        method("example.GeneratorsTestMethods\$repeatB\$1.invoke")))
+                suspended(Name("EmptyCoroutineContext$0"),
+                        method("kotlinx.coroutines.debug.test.GeneratorsTestMethods\$repeatA\$1.invoke")),
+                suspended(Name("EmptyCoroutineContext$1"),
+                        method("kotlinx.coroutines.debug.test.GeneratorsTestMethods\$repeatB\$1.invoke")))
         repeat(3) {
-            TestBase.expectNextSuspendedState(*stateTwoGenerators)
+            expectNextSuspendedState(*stateTwoGenerators)
         }
         Assert.assertEquals(GeneratorsTestMethods.repeatAB().take(N).toList(), listOf("ab", "ab"))
-        TestBase.expectNextSuspendedState(*stateTwoGenerators)
+        expectNextSuspendedState(*stateTwoGenerators)
     }
 
     @Test
     fun yieldAllTest() {
-        TestBase.expectNextSuspendedState(running(Name("EmptyCoroutineContext #0")),
-                suspended(Name("EmptyCoroutineContext #1"), method("example.GeneratorsTestMethods\$numbers\$1.invoke")))
+        expectNextSuspendedState(running(Name("EmptyCoroutineContext$0")),
+                suspended(Name("EmptyCoroutineContext$1"),
+                        method("kotlinx.coroutines.debug.test.GeneratorsTestMethods\$numbers\$1.invoke")))
         //TODO: add asserts for next states
         val actual = GeneratorsTestMethods.myIterator().take(6).toList()
         Assert.assertEquals(actual, listOf('a', 'b', 'b', 'c', 'c', 'c'))

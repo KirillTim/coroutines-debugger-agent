@@ -17,9 +17,9 @@ object PathUtil {
 
     private val JAVAAGENT_VM_PARAM = "-javaagent:${DEBUG_AGENT_PATH.absolutePath}=$DEFAULT_AGENT_PARAMS"
 
-    fun addJavaAgentVMParam(state: RunProfileState, agentParams: String = DEFAULT_AGENT_PARAMS) {
+    fun addJavaAgentVMParam(state: RunProfileState) {
         val javaCmdState = state as? BaseJavaApplicationCommandLineState<*>
-        javaCmdState?.getJavaParameters()?.vmParametersList?.add(PathUtil.JAVAAGENT_VM_PARAM)
+        javaCmdState?.getJavaParameters()?.vmParametersList?.add(JAVAAGENT_VM_PARAM)
     }
 
     private val DEBUG_AGENT_PATH: File

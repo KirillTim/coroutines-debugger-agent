@@ -1,4 +1,4 @@
-package example
+package kotlinx.coroutines.debug.test
 
 import kotlinx.coroutines.experimental.CoroutineName
 import kotlinx.coroutines.experimental.delay
@@ -32,17 +32,17 @@ object SimpleTestMethods {
 class SimpleTest : TestBase() {
     @Test
     fun delayTest1() {
-        TestBase.expectNextSuspendedState(suspended(Id(1),
+        expectNextSuspendedState(suspended(Id(1),
                 method("kotlinx.coroutines.experimental.DelayKt.delay\$default", file = "Delay.kt", line = 85),
-                method("example.SimpleTestMethods.defaultArgs"),
-                method("example.SimpleTestMethods.defaultArgs\$default"),
-                method("example.SimpleTest\$delayTest1\$result\$1.invoke")))
-        TestBase.expectNextSuspendedState(suspended(Id(1),
+                method("kotlinx.coroutines.debug.test.SimpleTestMethods.defaultArgs"),
+                method("kotlinx.coroutines.debug.test.SimpleTestMethods.defaultArgs\$default"),
+                method("kotlinx.coroutines.debug.test.SimpleTest\$delayTest1\$result\$1.invoke")))
+        expectNextSuspendedState(suspended(Id(1),
                 method("kotlinx.coroutines.experimental.DelayKt.delay\$default", file = "Delay.kt", line = 85),
-                method("example.SimpleTestMethods.tailNamedDelay"),
-                method("example.SimpleTestMethods.defaultArgs"),
-                method("example.SimpleTestMethods.defaultArgs\$default"),
-                method("example.SimpleTest\$delayTest1\$result\$1.invoke")))
+                method("kotlinx.coroutines.debug.test.SimpleTestMethods.tailNamedDelay"),
+                method("kotlinx.coroutines.debug.test.SimpleTestMethods.defaultArgs"),
+                method("kotlinx.coroutines.debug.test.SimpleTestMethods.defaultArgs\$default"),
+                method("kotlinx.coroutines.debug.test.SimpleTest\$delayTest1\$result\$1.invoke")))
         val result = runBlocking {
             SimpleTestMethods.defaultArgs()
         }
@@ -52,10 +52,10 @@ class SimpleTest : TestBase() {
 
     @Test
     fun testLambdaCreatedInside1() {
-        TestBase.expectNextSuspendedState(suspended(Id(1),
+        expectNextSuspendedState(suspended(Id(1),
                 method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                method("example.SimpleTest\$testLambdaCreatedInside1\$result\$1\$lambda\$1.invoke"),
-                method("example.SimpleTest\$testLambdaCreatedInside1\$result\$1.invoke")))
+                method("kotlinx.coroutines.debug.test.SimpleTest\$testLambdaCreatedInside1\$result\$1\$lambda\$1.invoke"),
+                method("kotlinx.coroutines.debug.test.SimpleTest\$testLambdaCreatedInside1\$result\$1.invoke")))
         val result = runBlocking {
             val lambda: suspend () -> Unit = { delay(10) }
             lambda()
@@ -67,10 +67,10 @@ class SimpleTest : TestBase() {
 
     @Test
     fun testNamedCoroutine() {
-        TestBase.expectNextSuspendedState(suspended(Name("named #1"),
+        expectNextSuspendedState(suspended(Name("named #1"),
                 method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                method("example.SimpleTest\$testNamedCoroutine\$result\$1\$lambda\$1.invoke"),
-                method("example.SimpleTest\$testNamedCoroutine\$result\$1.invoke")))
+                method("kotlinx.coroutines.debug.test.SimpleTest\$testNamedCoroutine\$result\$1\$lambda\$1.invoke"),
+                method("kotlinx.coroutines.debug.test.SimpleTest\$testNamedCoroutine\$result\$1.invoke")))
         val result = runBlocking(EmptyCoroutineContext + CoroutineName("named"), {
             val lambda: suspend () -> Unit = { delay(10) }
             lambda()
@@ -83,10 +83,10 @@ class SimpleTest : TestBase() {
     @Test
     fun testLambdaCreatedInside2() {
         (1..2).forEach {
-            TestBase.expectNextSuspendedState(suspended(Id(1),
+            expectNextSuspendedState(suspended(Id(1),
                     method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                    method("example.SimpleTest\$testLambdaCreatedInside2\$result\$1\$lambda\$1.invoke"),
-                    method("example.SimpleTest\$testLambdaCreatedInside2\$result\$1.invoke")))
+                    method("kotlinx.coroutines.debug.test.SimpleTest\$testLambdaCreatedInside2\$result\$1\$lambda\$1.invoke"),
+                    method("kotlinx.coroutines.debug.test.SimpleTest\$testLambdaCreatedInside2\$result\$1.invoke")))
         }
         val result = runBlocking {
             val lambda: suspend () -> Unit = {
@@ -110,14 +110,14 @@ class SimpleTest : TestBase() {
             val lambda: suspend () -> Unit = {
                 lambdaThrow()
             }
-            TestBase.expectNextSuspendedState(suspended(Id(1),
+            expectNextSuspendedState(suspended(Id(1),
                     method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                    method("example.SimpleTest\$testReturnFromSuspendFunction\$result\$1\$lambdaThrow\$1.invoke"),
-                    method("example.SimpleTest\$testReturnFromSuspendFunction\$result\$1\$lambda\$1.invoke"),
-                    method("example.SimpleTest\$testReturnFromSuspendFunction\$result\$1.invoke")))
-            TestBase.expectNextSuspendedState(suspended(Id(1),
+                    method("kotlinx.coroutines.debug.test.SimpleTest\$testReturnFromSuspendFunction\$result\$1\$lambdaThrow\$1.invoke"),
+                    method("kotlinx.coroutines.debug.test.SimpleTest\$testReturnFromSuspendFunction\$result\$1\$lambda\$1.invoke"),
+                    method("kotlinx.coroutines.debug.test.SimpleTest\$testReturnFromSuspendFunction\$result\$1.invoke")))
+            expectNextSuspendedState(suspended(Id(1),
                     method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                    method("example.SimpleTest\$testReturnFromSuspendFunction\$result\$1.invoke")))
+                    method("kotlinx.coroutines.debug.test.SimpleTest\$testReturnFromSuspendFunction\$result\$1.invoke")))
             try {
                 lambda()
             } catch (ignore: Exception) {
@@ -136,10 +136,10 @@ class SimpleTest : TestBase() {
 
     @Test
     fun testInlineNamedSuspend() {
-        TestBase.expectNextSuspendedState(suspended(Id(1),
+        expectNextSuspendedState(suspended(Id(1),
                 method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                method("example.SimpleTestMethods\$tailLambda\$1.invoke"),
-                method("example.SimpleTest\$testInlineNamedSuspend\$result\$1.invoke")))
+                method("kotlinx.coroutines.debug.test.SimpleTestMethods\$tailLambda\$1.invoke"),
+                method("kotlinx.coroutines.debug.test.SimpleTest\$testInlineNamedSuspend\$result\$1.invoke")))
         val result = runBlocking {
             SimpleTestMethods.inlineTest(42)
         }

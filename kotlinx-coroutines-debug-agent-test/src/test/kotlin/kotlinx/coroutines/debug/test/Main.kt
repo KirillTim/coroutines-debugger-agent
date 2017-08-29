@@ -1,8 +1,7 @@
-package example
+package kotlinx.coroutines.debug.test
 
-import kotlin.coroutines.experimental.Continuation
-
-import kotlinx.coroutines.experimental.*
+import kotlinx.coroutines.experimental.delay
+import kotlinx.coroutines.experimental.runBlocking
 
 fun log(msg: String) = println("[${(System.currentTimeMillis() / 1000).toString().drop(7)}: ${Thread.currentThread().name}] $msg")
 
