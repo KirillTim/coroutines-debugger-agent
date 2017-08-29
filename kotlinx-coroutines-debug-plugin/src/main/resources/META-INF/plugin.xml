@@ -19,8 +19,9 @@
 
     <actions>
         <action id="CoroutineDumpAction" class="kotlinx.coroutines.debug.plugin.CoroutineDumpAction"
-                text="Get coroutine dump" icon="AllIcons.Actions.Dump">
+                text="Get coroutine dump" icon="/kotlinx/coroutines/debug/plugin/icons/coroutine_dump.png">
             <add-to-group group-id="RunMenu" anchor="last"/>
+            <add-to-group group-id="XDebugger.ToolWindow.LeftToolbar" anchor="last"/> <!--TODO: better place?-->
         </action>
 
     </actions>
