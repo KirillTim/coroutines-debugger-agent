@@ -58,6 +58,76 @@ data class FullCoroutineDump(private val coroutines: List<CoroutineInfo>) {
     }
 }
 
+sealed class CoroutineInfo2 {
+    abstract val name: String
+    abstract val additionalInfo: String
+    abstract val status: CoroutineStatus
+    abstract val thread: Thread
+    protected abstract fun header(): String
+    protected val firstLine: String
+        get() = "\"$name\"${if (additionalInfo.isNotEmpty()) " $additionalInfo" else ""}\n"
+
+    protected fun statusLine(info: String = "") = "  Status: $status${if (info.isNotEmpty()) " $info" else ""}\n"
+    override fun toString() = header()
+}
+
+sealed class CoroutineWithStackInfo : CoroutineInfo2() {
+    abstract val coroutineStack: List<StackTraceElement>
+    protected fun stackToString(stack: List<StackTraceElement>) = buildString {
+        stack.forEach { append("    at $it\n") }
+    }
+
+    protected abstract fun body(): String
+    override fun toString() = buildString {
+        append(header())
+        append(body())
+    }
+}
+
+data class CreatedCoroutineInfo2(
+        override val name: String,
+        override val additionalInfo: String,
+        override val thread: Thread
+) : CoroutineInfo2() {
+    override val status = CoroutineStatus.Created
+    override fun header() = firstLine + statusLine("on $thread")
+}
+
+data class SuspendedCoroutineInfo2(
+        override val name: String,
+        override val additionalInfo: String,
+        val suspendedAt: String,
+        override val thread: Thread,
+        override val coroutineStack: List<StackTraceElement>
+) : CoroutineWithStackInfo() {
+    override val status = CoroutineStatus.Suspended
+
+    override fun header() = firstLine + statusLine("at $suspendedAt")
+
+    override fun body() = stackToString(coroutineStack)
+
+    override fun toString() = super.toString()
+}
+
+data class RunningCoroutineInfo2(
+        override val name: String,
+        override val additionalInfo: String,
+        override val thread: Thread,
+        override val coroutineStack: List<StackTraceElement>,
+        val stackBeforeCoroutine: List<StackTraceElement>
+
+) : CoroutineWithStackInfo() {
+    override val status = CoroutineStatus.Running
+    override fun header() = firstLine + statusLine("on $thread")
+
+    override fun body() = buildString {
+        append(stackToString(coroutineStack))
+        append("    -  ^^ coroutine ^^\n")
+        append(stackToString(stackBeforeCoroutine))
+    }
+}
+
+
 sealed class CoroutineInfo(
         open val name: String,
         open val additionalInfo: String,

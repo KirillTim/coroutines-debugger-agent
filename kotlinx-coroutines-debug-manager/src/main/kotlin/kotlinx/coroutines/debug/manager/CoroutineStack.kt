@@ -65,8 +65,7 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
     private val stack = mutableListOf<CoroutineStackFrame>()
     private val unAppliedStack = mutableListOf<CoroutineStackFrame>()
 
-    fun getSnapshot(): CoroutineSnapshot =
-            synchronized(this) { CoroutineSnapshot(name, context, status, thread, stack.map { it.call }) }
+    fun getSnapshot() = CoroutineSnapshot(name, context, status, thread, stack.map { it.call })
 
     /**
      * @return true if new frames were add to stack, false otherwise

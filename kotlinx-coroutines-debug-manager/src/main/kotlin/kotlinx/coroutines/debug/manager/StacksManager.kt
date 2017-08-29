@@ -43,6 +43,8 @@ object StacksManager {
 
     fun removeOnStackChangedCallback(callback: OnStackChangedCallback) = onChangeCallbacks.remove(callback)
 
+    fun coroutinesOnThread(thread: Thread) = runningOnThread[thread]?.toList()
+
     @JvmStatic
     fun getSnapshot() = FullCoroutineSnapshot(stacks.values.map { it.getSnapshot() }.toList()) //TODO: concurrency
 
