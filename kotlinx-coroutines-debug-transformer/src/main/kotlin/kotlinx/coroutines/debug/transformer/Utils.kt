@@ -26,15 +26,9 @@ internal val AbstractInsnNode?.isGetCOROUTINE_SUSPENDED: Boolean
             && owner == "kotlin/coroutines/experimental/intrinsics/IntrinsicsKt"
             && desc == "()${OBJECT_TYPE.descriptor}"
 
-internal val AbstractInsnNode?.isSetLabel: Boolean
-    get() = this is FieldInsnNode && (opcode == PUTSTATIC || opcode == PUTFIELD) && name == "label"
-
 internal val AbstractInsnNode?.isGetLabel: Boolean
     get() = (this is FieldInsnNode && opcode == GETFIELD && name == "label") //anonymous lambda
             || (this is MethodInsnNode && opcode == INVOKEVIRTUAL && name == "getLabel" && desc == "()I") //named
-
-internal val AbstractInsnNode?.isARETURN: Boolean
-    get() = this != null && opcode == ARETURN
 
 internal val AbstractInsnNode.isMeaningful: Boolean
     get() = when (type) {
@@ -50,23 +44,12 @@ internal val AbstractInsnNode.nextMeaningful: AbstractInsnNode?
         return cur
     }
 
-internal val AbstractInsnNode.previousMeaningful: AbstractInsnNode?
-    get() {
-        var cur = previous
-        while (cur != null && !cur.isMeaningful)
-            cur = cur.previous
-        return cur
-    }
-
 internal fun AbstractInsnNode?.isASTORE() = this != null && opcode == ASTORE
 internal fun AbstractInsnNode?.isALOAD(operand: Int? = null) =
         this != null && opcode == ALOAD && (operand == null || (this is VarInsnNode && `var` == operand))
 
 internal inline fun AbstractInsnNode?.nextMatches(predicate: (AbstractInsnNode) -> Boolean) =
         this?.nextMeaningful?.takeIf(predicate)
-
-internal inline fun AbstractInsnNode?.previousMatches(predicate: (AbstractInsnNode) -> Boolean) =
-        this?.previousMeaningful?.takeIf(predicate)
 
 internal fun AbstractInsnNode?.isStateMachineStartsHere() = //TODO check variable types and indexes
         isGetCOROUTINE_SUSPENDED
@@ -78,26 +61,8 @@ internal fun AbstractInsnNode?.isStateMachineStartsHere() = //TODO check variabl
 internal fun MethodNode.isStateMachineForAnonymousSuspendFunction() =
         isDoResume && instructions[0].isStateMachineStartsHere()
 
-internal fun InsnList.lastMeaningful() = if (last.isMeaningful) last else last.previousMeaningful
-
-internal fun InsnList.lastARETURN(): AbstractInsnNode? {
-    var cur = lastMeaningful()
-    while (cur != null && !cur.isARETURN)
-        cur = cur.previous
-    return cur
-}
-
 internal val InsnList.sequence: Sequence<AbstractInsnNode>
     get() = iterator().asSequence().filterIsInstance<AbstractInsnNode>()
-
-internal fun MethodNode.correspondingSuspendFunctionForDoResume(): MethodId {
-    require(isDoResume) { "$name should be doResume functionCall" }
-    val last = instructions.lastMeaningful()
-    require(last.isARETURN) { "last meaningful instruction must be areturn" }
-    val suspendFunCall = requireNotNull(last?.previousMeaningful as? MethodInsnNode,
-            { "can't find corresponding suspend method call" })
-    return MethodId.build(suspendFunCall.name, suspendFunCall.owner, suspendFunCall.desc)
-}
 
 internal val Type.isResumeMethodDesc: Boolean
     get() = returnType == OBJECT_TYPE && argumentTypes.contentEquals(arrayOf(OBJECT_TYPE, THROWABLE_TYPE))
@@ -120,17 +85,12 @@ internal fun MethodNode.isCreateCoroutine(owner: ClassNode) =
 
 internal fun MethodNode.isSuspend() = isSuspend(name, desc)
 
-internal sealed class SuspendCallInsnNode(open val insn: MethodInsnNode)
-
-internal data class NamedSuspendCallInsnNode(override val insn: MethodInsnNode) : SuspendCallInsnNode(insn)
-internal data class InvokeSuspendCallInsnNode(override val insn: MethodInsnNode) : SuspendCallInsnNode(insn)
-
-internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<SuspendCallInsnNode> {
-    val suspensionCalls = mutableListOf<SuspendCallInsnNode>()
+internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<MethodInsnNode> {
+    val suspensionCalls = mutableListOf<MethodInsnNode>()
     val functionInterfaceInvokes = mutableListOf<Pair<Int, MethodInsnNode>>()
     for ((index, instruction) in instructions.sequence.withIndex()) {
         if (instruction.isSuspendSignature())
-            suspensionCalls += NamedSuspendCallInsnNode(instruction as MethodInsnNode)
+            suspensionCalls += instruction as MethodInsnNode
         else if (instruction.isFunctionInterfaceInvoke)
             functionInterfaceInvokes += Pair(index, instruction as MethodInsnNode)
     }
@@ -164,7 +124,7 @@ internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<Susp
             //so we compare it with state machine class name
             if (lastMethodArgument.type == CONTINUATION_TYPE || lastMethodArgument.type == COROUTINE_IMPL_TYPE
                     || lastMethodArgument.type.internalName == expectedInvokeLastArgumentClassName)
-                suspensionCalls += InvokeSuspendCallInsnNode(invoke)
+                suspensionCalls += invoke
         }
     }
     return suspensionCalls
@@ -173,10 +133,7 @@ internal fun MethodNode.suspendCallInstructions(classNode: ClassNode): List<Susp
 private val FUNCTION_REGEX = "kotlin/jvm/functions/Function(\\d+)".toRegex()
 
 internal val AbstractInsnNode.isFunctionInterfaceInvoke: Boolean
-    get() {
-        return this is MethodInsnNode && opcode == INVOKEINTERFACE && name == "invoke"
-            && owner.matches(FUNCTION_REGEX)
-    }
+    get() = this is MethodInsnNode && opcode == INVOKEINTERFACE && name == "invoke" && owner.matches(FUNCTION_REGEX)
 
 internal fun AbstractInsnNode.isSuspendSignature() = this is MethodInsnNode && isSuspend(name, desc)
 
@@ -189,20 +146,9 @@ private fun isSuspend(name: String, desc: String): Boolean {
             && descType.returnType == Type.getType(Any::class.java)
 }
 
-internal fun prettyPrint(method: MethodId, argumentValues: List<Any>? = null): String {
-    val descType = Type.getType(method.desc)
-    val arguments = argumentValues?.joinToString() ?:
-            descType.argumentTypes.joinToString(transform = { it.className.split('.').last() })
-    val returnType = descType.returnType.className.split('.').last()
-    return "${method.className.replace('/', '.')}.${method.name}($arguments): $returnType"
-}
-
 internal fun MethodInsnNode.buildMethodId() = MethodId.build(name, owner, desc)
 
 internal fun MethodNode.buildMethodId(classNode: ClassNode) = MethodId.build(name, classNode.name, desc)
-
-internal fun MethodNode.firstInstructionLineNumber() = //FIXME
-        instructions.sequence.filterIsInstance<LineNumberNode>().map { it.line }.min() ?: -1
 
 internal fun ClassNode.byteCodeString(): String {
     val writer = StringWriter()

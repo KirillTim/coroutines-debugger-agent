@@ -6,6 +6,7 @@ import org.jetbrains.org.objectweb.asm.ClassWriter
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.ClassNode
+import org.jetbrains.org.objectweb.asm.tree.MethodInsnNode
 import org.jetbrains.org.objectweb.asm.tree.MethodNode
 import java.lang.instrument.ClassFileTransformer
 import java.security.ProtectionDomain
@@ -28,35 +29,17 @@ private fun MethodNode.findContinuationVarIndex(classNode: ClassNode): Int {
     return argumentVarIndex(Type.getArgumentTypes(desc), continuationArgIndex) + if (isStatic) 0 else 1
 }
 
-private fun SuspendCallInsnNode.buildSuspendCall(
-        classNode: ClassNode,
-        position: CallPosition,
-        calledFrom: MethodNode
-): SuspendCall = when (this) {
-    is NamedSuspendCallInsnNode ->
-        NamedFunctionSuspendCall(insn.buildMethodId(), calledFrom.buildMethodId(classNode), position)
-    is InvokeSuspendCallInsnNode ->
-        InvokeSuspendCall(insn.buildMethodId(), calledFrom.buildMethodId(classNode), position)
-}
-
 private fun MethodNode.addSuspendCallHandlers(
-        suspendCallsInThisMethod: List<SuspendCallInsnNode>,
-        continuationVarIndex: Int, classNode: ClassNode
+        suspendCallsInThisMethod: List<MethodInsnNode>,
+        continuationVarIndex: Int,
+        classNode: ClassNode
 ) {
     val lines = instructions.methodCallLineNumber()
     suspendCallsInThisMethod.forEach {
-        val position = CallPosition(classNode.sourceFile, lines[it.insn] ?: -1)
-        val call = it.buildSuspendCall(classNode, position, this)
+        val position = CallPosition(classNode.sourceFile, lines[it] ?: -1)
+        val call = SuspendCall(it.buildMethodId(), this.buildMethodId(classNode), position)
         val index = allSuspendCalls.appendWithIndex(call)
-        when (call) {
-            is NamedFunctionSuspendCall ->
-                instructions.insert(it.insn, generateAfterNamedSuspendCall(continuationVarIndex, index))
-            is InvokeSuspendCall -> {
-                val (before, after) = generateInvokeSuspendCallHandler(this, it.insn, continuationVarIndex, index)
-                instructions.insertBefore(it.insn, before)
-                instructions.insert(it.insn, after)
-            }
-        }
+        instructions.insert(it, generateAfterSuspendCall(continuationVarIndex, index))
     }
 }
 
@@ -89,7 +72,7 @@ private fun MethodNode.transformMethod(classNode: ClassNode) {
     val suspendCalls = suspendCallInstructions(classNode)
     if (suspendCalls.isEmpty()) return
     debug {
-        buildString { append("suspend calls:\n"); suspendCalls.forEach { append("${it.insn.buildMethodId()}\n") } }
+        buildString { append("suspend calls:\n"); suspendCalls.forEach { append("${it.buildMethodId()}\n") } }
     }
     addSuspendCallHandlers(suspendCalls, continuation, classNode)
 }
@@ -110,7 +93,7 @@ class CoroutinesDebugTransformer : ClassFileTransformer {
             try {
                 method.transformMethod(classNode)
             } catch (e: Exception) {
-                exceptions.add(e)
+                exceptions += e
                 val message = "while instrumenting $className.${method.name} with desc: ${method.desc} " +
                         "exception : ${e.stackTraceToString()}"
                 error { message }

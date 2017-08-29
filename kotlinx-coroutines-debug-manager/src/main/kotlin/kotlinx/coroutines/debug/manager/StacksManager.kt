@@ -27,7 +27,7 @@ object WakedUp : StackChangedEvent("WakedUp")
 
 typealias OnStackChangedCallback = StacksManager.(StackChangedEvent, WrappedContext) -> Unit
 
-val exceptions = CopyOnWriteArrayList<Exception>() //for tests and debug
+val exceptions = AppendOnlyThreadSafeList<Exception>() //for tests and debug
 
 object StacksManager {
     private val stacks = ConcurrentHashMap<WrappedContext, CoroutineStack>()
@@ -44,15 +44,13 @@ object StacksManager {
     fun removeOnStackChangedCallback(callback: OnStackChangedCallback) = onChangeCallbacks.remove(callback)
 
     @JvmStatic
-    fun getSnapshot() = //synchronized(this) {
-        //TODO: remove lock?
-            /*return@synchronized*/ FullCoroutineSnapshot(stacks.values.map { it.getSnapshot() }.toList())
-    //}
+    fun getSnapshot() = FullCoroutineSnapshot(stacks.values.map { it.getSnapshot() }.toList()) //TODO: concurrency
 
     /**
      * Should only be called from debugger inside idea plugin
      */
     @JvmStatic
+    @SuppressWarnings("unused")
     fun getFullDumpString() = getSnapshot().fullCoroutineDump().toString()
 
     fun ignoreNextDoResume(completion: Continuation<*>) = ignoreDoResumeWithCompletion.add(completion)
@@ -124,23 +122,13 @@ private fun MutableList<*>.dropLastInplace() {
 //functions called from instrumented(users) code
 object InstrumentedCodeEventsHandler {
     @JvmStatic
-    fun handleAfterNamedSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) =
-            handleAfterSuspendCall(result, continuation, allSuspendCalls[functionCallIndex])
-
-    // todo: remove, use regular handleAfterNamedSuspendCall
-    @JvmStatic
-    fun handleAfterInvokeSuspendCall(result: Any, continuation: Continuation<*>, lambda: Any, functionCallIndex: Int) {
-        val staticCall = allSuspendCalls[functionCallIndex] as InvokeSuspendCall
-        val call = staticCall.copy(realOwner = lambda.javaClass.name)
-        handleAfterSuspendCall(result, continuation, call)
-    }
-
-    private fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, call: SuspendCall) {
+    fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) {
         if (result !== COROUTINE_SUSPENDED) return
+        val call = allSuspendCalls[functionCallIndex]
         try {
             StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
         } catch (e: Exception) {
-            exceptions.add(e)
+            exceptions += e
             error {
                 "handleAfterSuspendCall(${continuation.toStringSafe()}, $call) exception: ${e.stackTraceToString()}"
             }

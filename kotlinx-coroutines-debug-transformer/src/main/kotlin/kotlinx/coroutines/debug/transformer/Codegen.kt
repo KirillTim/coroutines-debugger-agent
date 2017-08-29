@@ -1,9 +1,10 @@
 package kotlinx.coroutines.debug.transformer
 
-import jdk.internal.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
-import org.jetbrains.org.objectweb.asm.tree.*
+import org.jetbrains.org.objectweb.asm.tree.AbstractInsnNode
+import org.jetbrains.org.objectweb.asm.tree.InsnList
+import org.jetbrains.org.objectweb.asm.tree.MethodNode
 
 /**
  * @author Kirill Timofeev
@@ -12,8 +13,7 @@ import org.jetbrains.org.objectweb.asm.tree.*
 private val COMPLETION_WRAPPER_CLASS_NAME = "kotlinx/coroutines/debug/manager/WrappedCompletion"
 private val WRAP_COMPLETION = "maybeWrapCompletionAndCreateNewCoroutine"
 private val MANAGER_CLASS_NAME = "kotlinx/coroutines/debug/manager/InstrumentedCodeEventsHandler"
-private val AFTER_NAMED_SUSPEND_CALL = "handleAfterNamedSuspendCall"
-private val AFTER_INVOKE_SUSPEND_CALL = "handleAfterInvokeSuspendCall" // todo: remove, use handleAfterNamedSuspendCall
+private val AFTER_SUSPEND_CALL = "handleAfterSuspendCall"
 private val DO_RESUME_ENTER = "handleDoResumeEnter"
 
 internal inline fun code(block: InstructionAdapter.() -> Unit): InsnList =
@@ -28,71 +28,17 @@ fun generateNewWrappedCompletion(completionIndex: Int) =
         }
 
 /**
- * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleAfterNamedSuspendCall]
+ * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleAfterSuspendCall]
  * with continuation and index of function call from [kotlinx.coroutines.debug.manager.allSuspendCalls] list
  */
-fun generateAfterNamedSuspendCall(continuationVarIndex: Int, functionCallIndex: Int) =
+fun generateAfterSuspendCall(continuationVarIndex: Int, functionCallIndex: Int) =
         code {
             dup()
             load(continuationVarIndex, CONTINUATION_TYPE)
             aconst(functionCallIndex)
-            visitMethodInsn(Opcodes.INVOKESTATIC, MANAGER_CLASS_NAME, AFTER_NAMED_SUSPEND_CALL,
+            visitMethodInsn(Opcodes.INVOKESTATIC, MANAGER_CLASS_NAME, AFTER_SUSPEND_CALL,
                     "(${OBJECT_TYPE.descriptor}${CONTINUATION_TYPE.descriptor}I)V", false)
         }
-
-// todo: remove, use generateAfterNamedSuspendCall
-private fun generateAfterInvokeSuspendCall(lambdaVarIndex: Int, continuationVarIndex: Int, functionCallIndex: Int) =
-        code {
-            dup()
-            load(continuationVarIndex, CONTINUATION_TYPE)
-            load(lambdaVarIndex, OBJECT_TYPE)
-            aconst(functionCallIndex)
-            visitMethodInsn(Opcodes.INVOKESTATIC, MANAGER_CLASS_NAME, AFTER_INVOKE_SUSPEND_CALL,
-                    "(${OBJECT_TYPE.descriptor}${CONTINUATION_TYPE.descriptor}${OBJECT_TYPE.descriptor}I)V", false)
-        }
-
-private fun generateSaveStackToLocalVars(firstIndex: Int, stackSize: Int) =
-        code {
-            (0 until stackSize).forEach {
-                store(firstIndex + it, OBJECT_TYPE)
-            }
-        }
-
-private fun generateRestoreStackFromLocalVars(firstIndex: Int, stackSize: Int) =
-        code {
-            (0 until stackSize).reversed().forEach {
-                load(firstIndex + it, OBJECT_TYPE)
-            }
-        }
-
-private fun generateStoreLambdaObjectFromStack(firstIndex: Int, stackSize: Int): Pair<Int, InsnList> {
-    val instructions = generateSaveStackToLocalVars(firstIndex, stackSize)
-    val lambdaObjectVarIndex = firstIndex + stackSize
-    instructions.add(code {
-        dup()
-        store(lambdaObjectVarIndex, OBJECT_TYPE)
-    })
-    instructions.add(generateRestoreStackFromLocalVars(firstIndex, stackSize))
-    return Pair(lambdaObjectVarIndex, instructions)
-}
-
-/**
- * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleAfterInvokeSuspendCall]
- * with continuation, lambda object and index of function call from [kotlinx.coroutines.debug.manager.allSuspendCalls] list
- */
-fun generateInvokeSuspendCallHandler(
-        currentMethod: MethodNode,
-        invokeInsn: MethodInsnNode,
-        continuationVarIndex: Int,
-        functionCallIndex: Int
-): Pair<InsnList, InsnList> {
-    val firstIndex = currentMethod.instructions.sequence
-            .filter { it.isASTORE() }.filterIsInstance<VarInsnNode>().map { it.`var` }.max()!! + 1
-    val stackSize = Type.getType(invokeInsn.desc).argumentTypes.size
-    val (lambdaObjectVarIndex, before) = generateStoreLambdaObjectFromStack(firstIndex, stackSize)
-    val after = generateAfterInvokeSuspendCall(lambdaObjectVarIndex, continuationVarIndex, functionCallIndex)
-    return Pair(before, after)
-}
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.InstrumentedCodeEventsHandler.handleDoResumeEnter] with continuation
