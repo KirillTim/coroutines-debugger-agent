@@ -18,25 +18,4 @@ class WrappedCompletion(val completion: Continuation<Any?>?) : Continuation<Any?
         StacksManager.handleCoroutineExit(this)
         completion!!.resumeWithException(exception)
     }
-
-    companion object {
-        @JvmStatic
-        fun maybeWrapCompletionAndCreateNewCoroutine(completion: Continuation<Any?>?): Continuation<*> {
-            if (completion is CoroutineImpl) {
-                val completionField = CoroutineImpl::class.java.getDeclaredField("completion")
-                completionField.isAccessible = true
-                debug {
-                    "existing coroutine with completion: " +
-                            "${(completionField[completion] as Continuation<*>).hashCode()}, " +
-                            "continuation: ${completion.hashCode()}, context: ${completion.context}"
-                }
-                StacksManager.ignoreNextDoResume(completion)
-                return completion
-            }
-            val wrapped = WrappedCompletion(completion)
-            debug { "wrapping completion: ${completion!!.hashCode()}" }
-            StacksManager.handleNewCoroutineCreated(wrapped)
-            return wrapped
-        }
-    }
 }
