@@ -1,5 +1,8 @@
 package kotlinx.coroutines.debug.manager
 
+import com.sun.javafx.util.WeakReferenceQueue
+import java.lang.ref.ReferenceQueue
+import java.lang.ref.WeakReference
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -28,6 +31,15 @@ object WakedUp : StackChangedEvent("WakedUp")
 typealias OnStackChangedCallback = StacksManager.(StackChangedEvent, WrappedContext) -> Unit
 
 val exceptions = AppendOnlyThreadSafeList<Exception>() //for tests and debug
+
+// todo: use this to clean up
+val refQueue = ReferenceQueue<Continuation<*>>()
+class WeakContinuation(continuation: Continuation<*>) : WeakReference<Continuation<*>>(continuation, refQueue) {
+    private val hash = System.identityHashCode(continuation)
+    val continuation: Continuation<*>? get() = get()
+    override fun equals(other: Any?): Boolean = this === other || other is WeakContinuation && get() === other.get()
+    override fun hashCode() = hash
+}
 
 object StacksManager {
     private val stacks = ConcurrentHashMap<WrappedContext, CoroutineStack>()
@@ -121,23 +133,3 @@ private fun MutableList<*>.dropLastInplace() {
         removeAt(lastIndex)
 }
 
-//functions called from instrumented(users) code
-object InstrumentedCodeEventsHandler {
-    @JvmStatic
-    fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) {
-        if (result !== COROUTINE_SUSPENDED) return
-        val call = allSuspendCalls[functionCallIndex]
-        try {
-            StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
-        } catch (e: Exception) {
-            exceptions += e
-            error {
-                "handleAfterSuspendCall(${continuation.toStringSafe()}, $call) exception: ${e.stackTraceToString()}"
-            }
-        }
-    }
-
-    @JvmStatic
-    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, doResumeIndex: Int) =
-            StacksManager.handleDoResumeEnter(completion, continuation, knownDoResumeFunctions[doResumeIndex])
-}
