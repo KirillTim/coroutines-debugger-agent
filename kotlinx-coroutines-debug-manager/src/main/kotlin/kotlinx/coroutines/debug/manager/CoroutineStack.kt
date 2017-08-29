@@ -20,11 +20,14 @@ private data class CoroutineStackFrame(val id: FrameId, val call: MethodCall) {
     override fun toString() = "$id, $call"
 }
 
-sealed class WrappedContext {
-    abstract val context: CoroutineContext
-    abstract val name: String
-    abstract val additionalInfo: String
+data class WrappedContext(val name: String, val context: CoroutineContext, val additionalInfo: String? = null) {
     override fun toString() = name
+
+    companion object {
+        private val nextGeneratedId = AtomicInteger(0)
+        fun fromContextWithoutId(context: CoroutineContext) =
+                WrappedContext("$context$${nextGeneratedId.getAndIncrement()}", context, "")
+    }
 }
 
 private fun CoroutineContext.tryGetNameAndId(): Pair<String?, Int>? {
@@ -37,26 +40,8 @@ private fun CoroutineContext.tryGetNameAndId(): Pair<String?, Int>? {
 }
 
 private fun CoroutineContext.wrap(): WrappedContext {
-    val (name, id) = tryGetNameAndId() ?: return SingletonContext(this)
-    return NormalContext("${name ?: "coroutine"}#$id", this)
-}
-
-data class NormalContext(override val name: String, override val context: CoroutineContext) : WrappedContext() {
-    override val additionalInfo = "$context"
-    override fun toString() = "NormalContext($context)"
-}
-
-data class SingletonContext private constructor(override val context: CoroutineContext, private val id: Int)
-    : WrappedContext() {
-    constructor(context: CoroutineContext) : this(context, nextId.getAndIncrement())
-
-    override val name = "$context$$id"
-    override val additionalInfo = ""
-    override fun toString() = "SingletonContext($name)"
-
-    companion object {
-        private val nextId = AtomicInteger(0)
-    }
+    val (name, id) = tryGetNameAndId() ?: return WrappedContext.fromContextWithoutId(this)
+    return WrappedContext("${name ?: "coroutine"}#$id", this)
 }
 
 sealed class CoroutineStatus(private val status: String) {

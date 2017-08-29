@@ -18,12 +18,12 @@ data class CoroutineSnapshot(
     fun coroutineInfo(knownSuspendCalls: Collection<SuspendCall> = allSuspendCalls, //FIXME?
                       knownDoResumes: Collection<MethodId> = knownDoResumeFunctions) =
             when (status) {
-                CoroutineStatus.Created -> CreatedCoroutineInfo(name, context.additionalInfo, thread)
+                CoroutineStatus.Created -> CreatedCoroutineInfo(name, context.additionalInfo.orEmpty(), thread)
                 CoroutineStatus.Running -> {
                     val (before, coroutine) = fixThreadStack(threadStack, knownSuspendCalls, knownDoResumes)
-                    RunningCoroutineInfo(name, context.additionalInfo, thread, before, coroutine)
+                    RunningCoroutineInfo(name, context.additionalInfo.orEmpty(), thread, before, coroutine)
                 }
-                CoroutineStatus.Suspended -> SuspendedCoroutineInfo(name, context.additionalInfo, thread,
+                CoroutineStatus.Suspended -> SuspendedCoroutineInfo(name, context.additionalInfo.orEmpty(), thread,
                         coroutineStack.dropLast(1).map { it.stackTraceElement.rename() })
             }
 
