@@ -11,40 +11,40 @@ private sealed class FrameId {
     abstract val value: Continuation<*>
 }
 
+val Continuation<*>.prettyHash: String
+    get() = System.identityHashCode(this).toString(16)
+
 private data class ContinuationId(override val value: Continuation<*>) : FrameId() {
-    override fun toString() = "Continuation(${value.hashCode()})"
+    override fun toString() = "Continuation(${value::class.java.name}@${value.prettyHash})"
 }
 
 private data class CompletionId(override val value: Continuation<*>) : FrameId() {
-    override fun toString() = "Completion(${value.hashCode()})"
+    override fun toString() = "Completion(${value::class.java.name}@${value.prettyHash})"
 }
 
 private data class CoroutineStackFrame(val id: FrameId, val call: MethodCall) {
     override fun toString() = "$id, $call"
 }
 
-data class WrappedContext(val name: String, val context: CoroutineContext, val additionalInfo: String? = null) {
+class WrappedContext(val name: String, private val context: CoroutineContext) {
+    val additionalInfo by lazy { context.toString() }
     override fun toString() = name
-
-    companion object {
-        private val nextGeneratedId = AtomicInteger(0)
-        fun fromContextWithoutId(context: CoroutineContext) =
-                WrappedContext("$context$${nextGeneratedId.getAndIncrement()}", context, "")
-    }
+    override fun equals(other: Any?) = other === this || other is WrappedContext && name == other.name
+    override fun hashCode() = name.hashCode()
 }
 
-private fun CoroutineContext.tryGetNameAndId(): Pair<String?, Int>? {
+private val nextGeneratedId = AtomicInteger(0)
+
+private fun CoroutineContext.wrap(): WrappedContext {
     val parts = "$this".drop(1).dropLast(1).split(", ").map {
         val firstParenthesis = it.indexOf('(')
         if (firstParenthesis == -1) it to ""
         else it.take(firstParenthesis) to it.drop(firstParenthesis + 1).dropLast(1)
     }.toMap()
-    return parts["CoroutineId"]?.let { Pair(parts["CoroutineName"], it.toInt()) }
-}
-
-private fun CoroutineContext.wrap(): WrappedContext {
-    val (name, id) = tryGetNameAndId() ?: return WrappedContext.fromContextWithoutId(this)
-    return WrappedContext("${name ?: "coroutine"}#$id", this)
+    val name = parts["CoroutineName"] ?: "coroutine"
+    val id = parts["CoroutineId"]
+    val idStr = if (id != null) "#$id" else "$${nextGeneratedId.getAndIncrement()}"
+    return WrappedContext("$name$idStr", this)
 }
 
 sealed class CoroutineStatus(private val status: String) {
@@ -55,7 +55,7 @@ sealed class CoroutineStatus(private val status: String) {
     object Suspended : CoroutineStatus("Suspended")
 }
 
-class CoroutineStack(val initialCompletion: WrappedCompletion) {
+class CoroutineStack(private val initialCompletion: WrappedCompletion) {
     val context: WrappedContext = initialCompletion.context.wrap()
     val name: String = context.name
     var thread: Thread = Thread.currentThread()
@@ -87,8 +87,8 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
         debug {
             buildString {
                 append("stack applied\n")
-                append("topCurrentContinuation hash: ${topContinuation.hashCode()}\n")
-                append("initialCompletion: ${initialCompletion.hashCode()}\n")
+                append("topCurrentContinuation hash: ${topContinuation.prettyHash}\n")
+                append("initialCompletion: ${initialCompletion.prettyHash}\n")
                 append("temp:\n${unAppliedStack.joinToString("\n")}\n")
                 append("stack:\n${stack.joinToString("\n")}")
             }

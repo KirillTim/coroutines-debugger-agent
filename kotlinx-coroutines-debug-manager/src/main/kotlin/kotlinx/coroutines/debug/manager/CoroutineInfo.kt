@@ -30,10 +30,10 @@ data class CoroutineSnapshot(
         val coroutineStack: List<MethodCall>) {
     val threadStack = thread.stackTrace.toList()
     fun coroutineInfo(calledFromThread: Thread, conf: Configuration) = when (status) {
-        CoroutineStatus.Created -> CreatedCoroutineInfo(name, context.additionalInfo.orEmpty(), thread)
+        CoroutineStatus.Created -> CreatedCoroutineInfo(name, context.additionalInfo, thread)
         CoroutineStatus.Suspended -> {
             val suspendedAt = with(coroutineStack.first().method) { "$className.$name" }
-            SuspendedCoroutineInfo(name, context.additionalInfo.orEmpty(), suspendedAt, thread,
+            SuspendedCoroutineInfo(name, context.additionalInfo, suspendedAt, thread,
                     coroutineStack.dropLast(1).map { it.stackTraceElement.rename() })
         }
         CoroutineStatus.Running -> {
@@ -47,7 +47,7 @@ data class CoroutineSnapshot(
                 for ((index, coroutine) in StacksManager.coroutinesOnThread(thread).withIndex())
                     add(firstCalls[index], CoroutineInfoItem(coroutine.name, coroutine.name == name))
             }
-            RunningCoroutineInfo(name, context.additionalInfo.orEmpty(), thread, annotatedStack)
+            RunningCoroutineInfo(name, context.additionalInfo, thread, annotatedStack)
         }
     }
 }
@@ -113,7 +113,7 @@ data class FullCoroutineSnapshot(val coroutines: List<CoroutineSnapshot>) {
 
     fun prettyPrint() = buildString {
         coroutines.forEach {
-            append("${it.name} ${it.context.context} ${it.status} ${it.thread}\n")
+            append("${it.name} ${it.context.name} ${it.context.name} ${it.status} ${it.thread}\n")
             if (it.coroutineStack.isNotEmpty())
                 append(it.coroutineStack.joinToString(separator = "\n", prefix = "coroutine stack:\n", postfix = "\n"))
             if (it.status != CoroutineStatus.Suspended && it.threadStack.isNotEmpty())

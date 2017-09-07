@@ -4,7 +4,6 @@ import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.experimental.Continuation
-import kotlin.coroutines.experimental.intrinsics.COROUTINE_SUSPENDED
 
 /**
  * @author Kirill Timofeev
@@ -58,7 +57,7 @@ object StacksManager {
     fun ignoreNextDoResume(completion: Continuation<*>) = ignoreDoResumeWithCompletion.add(completion)
 
     fun handleNewCoroutineCreated(wrappedCompletion: WrappedCompletion) {
-        debug { "handleNewCoroutineCreated(${wrappedCompletion.hashCode()})" }
+        debug { "handleNewCoroutineCreated(${wrappedCompletion.prettyHash})" }
         val stack = CoroutineStack(wrappedCompletion)
         stacks[stack.context] = stack
         initialCompletion[wrappedCompletion] = stack
@@ -66,7 +65,7 @@ object StacksManager {
     }
 
     fun handleCoroutineExit(wrappedCompletion: Continuation<*>) {
-        debug { "handleCoroutineExit(${wrappedCompletion.hashCode()})" }
+        debug { "handleCoroutineExit(${wrappedCompletion.prettyHash})" }
         val stack = initialCompletion.remove(wrappedCompletion)!!
         stacks.remove(stack.context)
         runningOnThread[stack.thread]?.let { if (it.lastOrNull() == stack) it.dropLastInplace() }
@@ -74,7 +73,7 @@ object StacksManager {
     }
 
     fun handleAfterSuspendFunctionReturn(continuation: Continuation<*>, call: SuspendCall) {
-        debug { "handleAfterSuspendFunctionReturn(${continuation.hashCode()}, $call)" }
+        debug { "handleAfterSuspendFunctionReturn(${continuation.prettyHash}, $call)" }
         val runningOnCurrentThread = runningOnThread[Thread.currentThread()]!!
         val stack = runningOnCurrentThread.last()
         topDoResumeContinuation.remove(stack.topFrameCompletion)
@@ -86,7 +85,7 @@ object StacksManager {
     }
 
     fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, function: MethodId) {
-        debug { "handleDoResumeEnter(compl: ${completion.hashCode()}, cont: ${continuation.hashCode()}, $function)" }
+        debug { "handleDoResumeEnter(compl: ${completion.prettyHash}, cont: ${continuation.prettyHash}, $function)" }
         if (ignoreDoResumeWithCompletion.remove(completion)) {
             debug { "ignored" }
             return
@@ -119,25 +118,4 @@ object StacksManager {
 private fun MutableList<*>.dropLastInplace() {
     if (isNotEmpty())
         removeAt(lastIndex)
-}
-
-//functions called from instrumented(users) code
-object InstrumentedCodeEventsHandler {
-    @JvmStatic
-    fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) {
-        if (result !== COROUTINE_SUSPENDED) return
-        val call = allSuspendCalls[functionCallIndex]
-        try {
-            StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
-        } catch (e: Exception) {
-            exceptions += e
-            error {
-                "handleAfterSuspendCall(${continuation.toStringSafe()}, $call) exception: ${e.stackTraceToString()}"
-            }
-        }
-    }
-
-    @JvmStatic
-    fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, doResumeIndex: Int) =
-            StacksManager.handleDoResumeEnter(completion, continuation, knownDoResumeFunctions[doResumeIndex])
 }
