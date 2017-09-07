@@ -3,10 +3,24 @@ package kotlinx.coroutines.debug.manager
 /**
  * @author Kirill Timofeev
  */
-
 private fun StackTraceElement.rename() =
         if (methodName == "doResume") StackTraceElement(className, "invoke", fileName, lineNumber)
         else this
+
+// java.lang.Thread.getStackTrace(Thread.java:1559)
+private val FRAMES_TO_REMOVE_FROM_ACTIVE_RUNNING_THREAD_WHEN_RUN = 1
+
+// java.lang.Thread.getStackTrace(Thread.java:1559)
+// kotlinx.coroutines.debug.manager.CoroutineSnapshot.<init>(CoroutineInfo.kt:26)
+// kotlinx.coroutines.debug.manager.CoroutineStack.getSnapshot(CoroutineStack.kt:68)
+// kotlinx.coroutines.debug.manager.StacksManager.getSnapshot(StacksManager.kt:49)
+// kotlinx.coroutines.debug.manager.StacksManager.getFullDumpString(StacksManager.kt:56)
+
+// sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+// sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+// sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+// java.lang.reflect.Method.invoke(Method.java:498)
+private val FRAMES_TO_REMOVE_FROM_ACTIVE_RUNNING_THREAD_WHEN_DEBUG = 5 + 4 //FIXME
 
 data class CoroutineSnapshot(
         val name: String,
@@ -15,37 +29,98 @@ data class CoroutineSnapshot(
         val thread: Thread,
         val coroutineStack: List<MethodCall>) {
     val threadStack = thread.stackTrace.toList()
-    fun coroutineInfo(knownSuspendCalls: Collection<SuspendCall> = allSuspendCalls, //FIXME?
-                      knownDoResumes: Collection<MethodId> = knownDoResumeFunctions) =
-            when (status) {
-                CoroutineStatus.Created -> CreatedCoroutineInfo(name, context.additionalInfo.orEmpty(), thread)
-                CoroutineStatus.Running -> {
-                    val (before, coroutine) = fixThreadStack(threadStack, knownSuspendCalls, knownDoResumes)
-                    RunningCoroutineInfo(name, context.additionalInfo.orEmpty(), thread, before, coroutine)
-                }
-                CoroutineStatus.Suspended -> SuspendedCoroutineInfo(name, context.additionalInfo.orEmpty(), thread,
-                        coroutineStack.dropLast(1).map { it.stackTraceElement.rename() })
-            }
-
-    private fun fixThreadStack(
-            threadStack: List<StackTraceElement>,
-            knownSuspendCalls: Collection<SuspendCall>,
-            knownDoResumeCalls: Collection<MethodId>): Pair<List<StackTraceElement>, List<StackTraceElement>> {
-        val suspendCall: (StackTraceElement) -> Boolean = { ste ->
-            knownSuspendCalls.any { it.stackTraceElement == ste } || knownDoResumeCalls.any { it.equalsTo(ste) }
+    fun coroutineInfo(calledFromThread: Thread, conf: Configuration) = when (status) {
+        CoroutineStatus.Created -> CreatedCoroutineInfo(name, context.additionalInfo.orEmpty(), thread)
+        CoroutineStatus.Suspended -> {
+            val suspendedAt = with(coroutineStack.first().method) { "$className.$name" }
+            SuspendedCoroutineInfo(name, context.additionalInfo.orEmpty(), suspendedAt, thread,
+                    coroutineStack.dropLast(1).map { it.stackTraceElement.rename() })
         }
-        val stackWithoutTechnicalCalls = threadStack.filter { !it.className.startsWith(DEBUG_AGENT_PACKAGE_PREFIX) }
-                .drop(1) //java.lang.Thread.getStackTrace(Thread.java:1559)
-        val top = stackWithoutTechnicalCalls.indexOfFirst(suspendCall)
-        if (top == -1) return Pair(stackWithoutTechnicalCalls, emptyList())
-        val bottom = stackWithoutTechnicalCalls.indexOfLast(suspendCall)
-        val fixedPart = stackWithoutTechnicalCalls.subList(top, bottom + 1).filter(suspendCall).map { it.rename() }
-        return Pair(stackWithoutTechnicalCalls.drop(bottom + 1), stackWithoutTechnicalCalls.take(top) + fixedPart)
+        CoroutineStatus.Running -> {
+            val cleanThreadStack = removeInvokeBeforeDoResume(
+                    if (calledFromThread == thread) threadStack.drop(conf.topFramesToDrop) else
+                        threadStack)
+            val firstCalls = suspendBlockFirstCalls(cleanThreadStack)
+            require(firstCalls.size == StacksManager.coroutinesOnThread(thread).size)
+            val annotatedStack = cleanThreadStack.map { it.rename() }.map { STEItem(it) }
+                    .toMutableList<CoroutineStackViewElement>().apply {
+                for ((index, coroutine) in StacksManager.coroutinesOnThread(thread).withIndex())
+                    add(firstCalls[index], CoroutineInfoItem(coroutine.name, coroutine.name == name))
+            }
+            RunningCoroutineInfo(name, context.additionalInfo.orEmpty(), thread, annotatedStack)
+        }
     }
 }
 
+private fun removeInvokeBeforeDoResume(stack: List<StackTraceElement>): List<StackTraceElement> {
+    val result = stack.toMutableList()
+    var index = 0
+    while (index < result.size) {
+        if (isSuspendLambdaDoResume(result, index))
+            result.removeAt(index + 1) //doResume will be renamed to deleted invoke
+        index++
+    }
+    return result
+}
+
+private fun isSuspendLambdaDoResume(stack: List<StackTraceElement>, atDoResumeIndex: Int): Boolean {
+    if (knownDoResumeFunctions.none { it.equalsTo(stack[atDoResumeIndex]) }) return false
+    val lambdaObjectClassName = stack[atDoResumeIndex].className
+    if (atDoResumeIndex + 1 > stack.lastIndex
+            || stack[atDoResumeIndex + 1].methodName != "invoke"
+            || stack[atDoResumeIndex + 1].className != lambdaObjectClassName
+            || stack[atDoResumeIndex + 1].lineNumber != -1) return false
+    if (atDoResumeIndex + 2 > stack.lastIndex
+            || stack[atDoResumeIndex + 2].methodName != "invoke"
+            || stack[atDoResumeIndex + 2].className != lambdaObjectClassName) return false
+    return atDoResumeIndex + 3 <= stack.lastIndex && allSuspendCalls.any {
+        it.stackTraceElement == stack[atDoResumeIndex + 3] && it.method.name == "invoke"
+    }
+}
+
+//doResume can be called only from invoke or other suspend function
+private fun suspendBlockFirstCalls(stack: List<StackTraceElement>): List<Int> {
+    val coroutineStarts = mutableListOf<Int>()
+    var inCoroutine = false
+    var index = stack.lastIndex
+    while (index >= 0) {
+        if (allSuspendCalls.any { it.stackTraceElement == stack[index] }
+                || knownDoResumeFunctions.any { it.equalsTo(stack[index]) }
+                || (index - 1 > 0 && knownDoResumeFunctions.any { it.equalsTo(stack[index - 1]) })
+                || (stack[index].methodName == "invoke" && index - 1 > 0
+                && knownDoResumeFunctions.any { it.equalsTo(stack[index - 1]) })) {
+            if (!inCoroutine) {
+                coroutineStarts += index
+                inCoroutine = true
+            }
+        } else
+            inCoroutine = false
+        index -= 1
+    }
+    return coroutineStarts
+}
+
+sealed class Configuration(val topFramesToDrop: Int) {
+    object Run : Configuration(FRAMES_TO_REMOVE_FROM_ACTIVE_RUNNING_THREAD_WHEN_RUN)
+    object Debug : Configuration(FRAMES_TO_REMOVE_FROM_ACTIVE_RUNNING_THREAD_WHEN_DEBUG)
+}
+
 data class FullCoroutineSnapshot(val coroutines: List<CoroutineSnapshot>) {
-    fun fullCoroutineDump() = FullCoroutineDump(coroutines.map { it.coroutineInfo() })
+    fun fullCoroutineDump(runConfiguration: Configuration): FullCoroutineDump {
+        val currentThread = Thread.currentThread()
+        return FullCoroutineDump(coroutines.map { it.coroutineInfo(currentThread, runConfiguration) })
+    }
+
+    fun prettyPrint() = buildString {
+        coroutines.forEach {
+            append("${it.name} ${it.context.context} ${it.status} ${it.thread}\n")
+            if (it.coroutineStack.isNotEmpty())
+                append(it.coroutineStack.joinToString(separator = "\n", prefix = "coroutine stack:\n", postfix = "\n"))
+            if (it.status != CoroutineStatus.Suspended && it.threadStack.isNotEmpty())
+                append(it.threadStack.joinToString(separator = "\n", prefix = "thread stack:\n", postfix = "\n"))
+            append("\n")
+        }
+    }
 }
 
 data class FullCoroutineDump(private val coroutines: List<CoroutineInfo>) {
@@ -58,56 +133,67 @@ data class FullCoroutineDump(private val coroutines: List<CoroutineInfo>) {
     }
 }
 
-sealed class CoroutineInfo(
-        open val name: String,
-        open val additionalInfo: String,
-        open val thread: Thread,
-        val status: CoroutineStatus,
-        open val coroutineStack: List<StackTraceElement>) {
-    protected fun header() = buildString {
-        append("\"$name\" $additionalInfo\n")
-        append("  Status: $status")
-        if (status == CoroutineStatus.Running) append(" on $thread")
-        append("\n")
-    }
-
-    protected fun stackToString(stack: List<StackTraceElement>) = buildString {
-        stack.forEach { append("    at $it\n") }
-    }
+sealed class CoroutineStackViewElement
+data class STEItem(val ste: StackTraceElement) : CoroutineStackViewElement() {
+    override fun toString() = "    at $ste"
 }
 
-data class SuspendedCoroutineInfo(
-        override val name: String,
-        override val additionalInfo: String,
-        override val thread: Thread,
-        override val coroutineStack: List<StackTraceElement>
-) : CoroutineInfo(name, additionalInfo, thread, CoroutineStatus.Suspended, coroutineStack) {
-    override fun toString() = buildString {
-        //FIXME should i print last function name at the first line?
-        append(header())
-        append(stackToString(coroutineStack))
-    }
+data class CoroutineInfoItem(val coroutineName: String, val current: Boolean = false) : CoroutineStackViewElement() {
+    override fun toString() = "    -- ^^ $coroutineName${if (current) " (current)" else ""} ^^"
 }
 
-data class RunningCoroutineInfo(
-        override val name: String,
-        override val additionalInfo: String,
-        override val thread: Thread,
-        val stackBeforeCoroutine: List<StackTraceElement>,
-        override val coroutineStack: List<StackTraceElement>
-) : CoroutineInfo(name, additionalInfo, thread, CoroutineStatus.Running, coroutineStack) {
+sealed class CoroutineInfo {
+    abstract val name: String
+    abstract val additionalInfo: String
+    abstract val status: CoroutineStatus
+    abstract val thread: Thread
+    abstract val labeledCurrentThreadStack: List<CoroutineStackViewElement>
+    protected abstract fun header(): String
+    protected abstract fun body(): String
+    protected val firstLine: String
+        get() = "\"$name\"${if (additionalInfo.isNotEmpty()) " $additionalInfo" else ""}\n"
+
+    protected fun statusLine(info: String = "") = "  Status: $status${if (info.isNotEmpty()) " $info" else ""}\n"
     override fun toString() = buildString {
         append(header())
-        append(stackToString(coroutineStack))
-        append("    -  coroutine started\n")
-        append(stackToString(stackBeforeCoroutine))
+        append(body())
     }
 }
 
 data class CreatedCoroutineInfo(
         override val name: String,
         override val additionalInfo: String,
-        override val thread: Thread)
-    : CoroutineInfo(name, additionalInfo, thread, CoroutineStatus.Created, emptyList()) {
-    override fun toString() = header()
+        override val thread: Thread
+) : CoroutineInfo() {
+    override val labeledCurrentThreadStack = emptyList<CoroutineStackViewElement>()
+    override val status = CoroutineStatus.Created
+    override fun header() = firstLine + statusLine("on $thread")
+    override fun body() = ""
+    override fun toString() = super.toString()
+}
+
+data class SuspendedCoroutineInfo(
+        override val name: String,
+        override val additionalInfo: String,
+        val suspendedAt: String,
+        override val thread: Thread,
+        val realStack: List<StackTraceElement>
+) : CoroutineInfo() {
+    override val labeledCurrentThreadStack: List<CoroutineStackViewElement> = realStack.map { STEItem(it) }
+    override val status = CoroutineStatus.Suspended
+    override fun header() = firstLine + statusLine("at $suspendedAt")
+    override fun body() = labeledCurrentThreadStack.joinToString(separator = "\n", postfix = "\n")
+    override fun toString() = super.toString()
+}
+
+data class RunningCoroutineInfo(
+        override val name: String,
+        override val additionalInfo: String,
+        override val thread: Thread,
+        override val labeledCurrentThreadStack: List<CoroutineStackViewElement>
+) : CoroutineInfo() {
+    override val status = CoroutineStatus.Running
+    override fun header() = firstLine + statusLine("on $thread")
+    override fun body() = labeledCurrentThreadStack.joinToString(separator = "\n", postfix = "\n")
+    override fun toString() = super.toString()
 }

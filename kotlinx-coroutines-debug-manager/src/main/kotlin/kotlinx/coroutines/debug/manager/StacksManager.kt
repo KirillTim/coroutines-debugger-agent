@@ -43,6 +43,8 @@ object StacksManager {
 
     fun removeOnStackChangedCallback(callback: OnStackChangedCallback) = onChangeCallbacks.remove(callback)
 
+    fun coroutinesOnThread(thread: Thread) = runningOnThread[thread]?.toList().orEmpty()
+
     @JvmStatic
     fun getSnapshot() = FullCoroutineSnapshot(stacks.values.map { it.getSnapshot() }.toList()) //TODO: concurrency
 
@@ -50,8 +52,8 @@ object StacksManager {
      * Should only be called from debugger inside idea plugin
      */
     @JvmStatic
-    @SuppressWarnings("unused")
-    fun getFullDumpString() = getSnapshot().fullCoroutineDump().toString()
+    @Suppress("unused")
+    fun getFullDumpString() = getSnapshot().fullCoroutineDump(Configuration.Debug).toString()
 
     fun ignoreNextDoResume(completion: Continuation<*>) = ignoreDoResumeWithCompletion.add(completion)
 

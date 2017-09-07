@@ -36,7 +36,7 @@ class Agent {
                             buildString {
                                 append("event: $event for context $coroutineContext\n")
                                 append("snapshot:\n")
-                                append(getSnapshot().fullCoroutineDump().toString())
+                                append(getSnapshot().prettyPrint())
                             }
                         }
                 }
@@ -57,7 +57,7 @@ private fun addSignalHandler(agentArgs: String?) { //FIXME?
         }
     } ?: Signal("USR2")
     Signal.handle(signal, {
-        val coroutineDump = StacksManager.getSnapshot().fullCoroutineDump()
+        val coroutineDump = StacksManager.getSnapshot().fullCoroutineDump(Configuration.Run)
         System.err.println(coroutineDump.toString())
     })
     val nameOfRunningVM = ManagementFactory.getRuntimeMXBean().name

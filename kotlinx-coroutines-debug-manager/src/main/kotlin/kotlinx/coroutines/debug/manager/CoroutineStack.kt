@@ -4,6 +4,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.CoroutineContext
 
+/**
+ * @author Kirill Timofeev
+ */
 private sealed class FrameId {
     abstract val value: Continuation<*>
 }
@@ -65,8 +68,7 @@ class CoroutineStack(val initialCompletion: WrappedCompletion) {
     private val stack = mutableListOf<CoroutineStackFrame>()
     private val unAppliedStack = mutableListOf<CoroutineStackFrame>()
 
-    fun getSnapshot(): CoroutineSnapshot =
-            synchronized(this) { CoroutineSnapshot(name, context, status, thread, stack.map { it.call }) }
+    fun getSnapshot() = CoroutineSnapshot(name, context, status, thread, stack.map { it.call })
 
     /**
      * @return true if new frames were add to stack, false otherwise

@@ -91,9 +91,9 @@ data class ExpectedState(val coroutines: List<ExpectedCoroutineState>) {
         Assert.assertEquals(expected.keys.toHashSet(), actual.keys.toHashSet())
         for ((name, expectedStack) in expected) {
             if (expectedStack == null) continue
-            val actualStack = actual[name]!!.coroutineStack
+            val actualStack = actual[name]!!.labeledCurrentThreadStack.filterIsInstance<STEItem>()
             val stacksMatch = expectedStack.size == actualStack.size &&
-                    expectedStack.withIndex().all { (i, element) -> element.isStackTraceElement(actualStack[i]) }
+                    expectedStack.withIndex().all { (i, element) -> element.isStackTraceElement(actualStack[i].ste) }
             val message = buildString {
                 append("expected:\n")
                 append(expectedStack.joinToString("\n"))
@@ -108,6 +108,29 @@ data class ExpectedState(val coroutines: List<ExpectedCoroutineState>) {
 }
 
 fun expectedState(vararg coroutines: ExpectedCoroutineState) = ExpectedState(coroutines.toList())
+
+typealias CoroutineName = String
+fun checkLikeInDebugPausedHereStateDump(vararg expected: Pair<CoroutineName, Regex>) {
+    val dump = likeInDebugTextStateDump()
+    val coroutineDumps = dump.substring(dump.indexOf('\n') + 1) //drop header
+            .split("\n\n").dropLast(1).map {
+        //"(<name>)" <additional info>\n(<status>\n<stack>)
+        val pattern = "^\\\"(.+)\\\".*\n( {2}Status:\\s[A-Za-z]+.*\n.*)".toRegex(RegexOption.DOT_MATCHES_ALL)
+        var (_, name, info) = requireNotNull(pattern.find(it)?.groupValues, { "Can't parse coroutine dump:\n $dump" })
+        if (info.toLowerCase().startsWith("  status: running")) //remove `checkLikeInDebugPausedHereStateDump` call from stacktrace
+            info = info.split("\n").toMutableList().apply { removeAt(1) }.joinToString("\n")
+        name to info
+    }.toMap()
+    Assert.assertEquals(expected.map { it.first }.toSet().toList(), coroutineDumps.keys.toList())
+    for ((name, pattern) in expected) {
+        requireNotNull(pattern.matchEntire(coroutineDumps[name]!!),
+                { "Pattern mismatched for '$name'.\npattern: $pattern\ndump: ${coroutineDumps[name]!!}" })
+    }
+}
+
+private fun likeInDebugTextStateDump(): String =
+        Class.forName("kotlinx.coroutines.debug.manager.StacksManager")
+                .getDeclaredMethod("getFullDumpString").invoke(null) as String
 
 open class TestBase {
 
@@ -165,7 +188,9 @@ open class TestBase {
             if (expected == null) {
                 println("no check for state: $currentState")
             } else {
-                val snapshot = manager.getSnapshot().coroutines.map { it.coroutineInfo() }.toList()
+                val snapshot = manager.getSnapshot().coroutines.map {
+                    it.coroutineInfo(Thread.currentThread(), Configuration.Run)
+                }.toList()
                 expected.assertEquals(snapshot)
             }
 
