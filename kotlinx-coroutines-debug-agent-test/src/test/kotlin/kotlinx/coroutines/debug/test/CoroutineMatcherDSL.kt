@@ -42,9 +42,11 @@ abstract class FullStringMatcher : WithMatchablePattern<RegexStringMatcher>() {
     fun matchEntireString(string: String) = match(string.split('\n').map { RegexStringMatcher(it) })
 }
 
-class Stack : FullStringMatcher() {
+class Coroutine(val name: String, val status: Status) : FullStringMatcher() {
+    override val pattern: MutableList<Token<RegexStringMatcher>>
+            = mutableListOf(Single(RegexStringMatcher("\\\"$name\\\".*")), Single(RegexStringMatcher(status)))
+
     val any = StackElement(null)
-    override val pattern = mutableListOf<Token<RegexStringMatcher>>()
     fun Int.methods(element: StackElement) =
             repeat(this) { pattern += Single(RegexStringMatcher(element)) }
 
@@ -78,19 +80,8 @@ class Stack : FullStringMatcher() {
             oneOrMore(StackElement(method, file, line))
 }
 
-class Coroutine(val name: String, val status: Status) : FullStringMatcher() {
-    override val pattern: MutableList<Token<RegexStringMatcher>>
-            = mutableListOf(Single(RegexStringMatcher("\\\"$name\\\".*")), Single(RegexStringMatcher(status)))
-}
-
-fun coroutine(name: String, status: Status, stack: Coroutine.() -> Stack): Coroutine {
+fun coroutine(name: String, status: Status, appendStack: Coroutine.() -> Unit): Coroutine {
     val coroutine = Coroutine(name, status)
-    coroutine.pattern += coroutine.stack().pattern
+    coroutine.appendStack()
     return coroutine
-}
-
-fun stack(append: Stack.() -> Unit): Stack {
-    val stack = Stack()
-    stack.append()
-    return stack
 }

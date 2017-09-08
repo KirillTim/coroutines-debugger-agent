@@ -46,12 +46,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testSuspendFullStack() {
         val matcher = coroutine("foo#1", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
-                method("MainKt.testInner")
-                method("MainKt.test")
-                method("MainKt\$main\$1.invoke")
-            }
+            method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
+            method("MainKt.testInner")
+            method("MainKt.test")
+            method("MainKt\$main\$1.invoke")
         }
         suspendMatcherOK(matcher)
     }
@@ -59,12 +57,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testSuspendZeroOrMore() {
         val matcher = coroutine("foo#1", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                zeroOrMore("wrong.position")
-                zeroOrMore("kotlinx.coroutines.experimental.DelayKt.delay\$default", "WrongFile")
-                3.methods(any)
-                method("MainKt\$main\$1.invoke", "Main.kt", 53)
-            }
+            zeroOrMore("wrong.position")
+            zeroOrMore("kotlinx.coroutines.experimental.DelayKt.delay\$default", "WrongFile")
+            3.methods(any)
+            method("MainKt\$main\$1.invoke", "Main.kt", 53)
         }
         suspendMatcherOK(matcher)
     }
@@ -72,11 +68,9 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testSuspendOneOrMore() {
         val matcher = coroutine("foo#1", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                oneOrMore("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
-                2.methods(any)
-                method("MainKt\$main\$1.invoke", "Main.kt", 53)
-            }
+            oneOrMore("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
+            2.methods(any)
+            method("MainKt\$main\$1.invoke", "Main.kt", 53)
         }
         suspendMatcherOK(matcher)
     }
@@ -84,11 +78,9 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testSuspendTimes() {
         val matcher = coroutine("foo#1", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
-                1.methods("MainKt.testInner", "Main.kt")
-                2.methods(any)
-            }
+            method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
+            1.methods("MainKt.testInner", "Main.kt")
+            2.methods(any)
         }
         suspendMatcherOK(matcher)
     }
@@ -97,12 +89,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testSuspendWrongNameDoesntMatch() {
         val matcher = coroutine("Wrong Name", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
-                method("MainKt.testInner")
-                method("MainKt.test")
-                method("MainKt\$main\$1.invoke")
-            }
+            method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
+            method("MainKt.testInner")
+            method("MainKt.test")
+            method("MainKt\$main\$1.invoke")
         }
         suspendMatcherFAIL(matcher)
     }
@@ -110,10 +100,8 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testWrongLineNumberDoesntMatch() {
         val matcher = coroutine("foo#1", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 42)
-                3.methods(any)
-            }
+            method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 42)
+            3.methods(any)
         }
         suspendMatcherFAIL(matcher)
     }
@@ -121,10 +109,8 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testWrongFileDoesntMatch() {
         val matcher = coroutine("foo#1", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "WrongFile", 85)
-                3.methods(any)
-            }
+            method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "WrongFile", 85)
+            3.methods(any)
         }
         suspendMatcherFAIL(matcher)
     }
@@ -132,12 +118,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testSuspendWrongSuspendAtDoesntMatch() {
         val matcher = coroutine("foo#1", Suspended("wrong.position")) {
-            stack {
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
-                method("MainKt.testInner")
-                method("MainKt.test")
-                method("MainKt\$main\$1.invoke")
-            }
+            method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
+            method("MainKt.testInner")
+            method("MainKt.test")
+            method("MainKt\$main\$1.invoke")
         }
         suspendMatcherFAIL(matcher)
     }
@@ -145,10 +129,8 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testSuspendPartDoesntMatch() {
         val matcher = coroutine("foo#1", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
-                method("MainKt.testInner")
-            }
+            method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
+            method("MainKt.testInner")
         }
         suspendMatcherFAIL(matcher)
     }
@@ -156,17 +138,13 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testSuspendWrongOneOrMoreDoesntMatch() {
         val matcherOK = coroutine("foo#1", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                zeroOrMore("wrong.method")
-                zeroOrMore(any)
-            }
+            zeroOrMore("wrong.method")
+            zeroOrMore(any)
         }
         suspendMatcherOK(matcherOK)
         val matcherFail = coroutine("foo#1", Suspended("kotlinx.coroutines.experimental.DelayKt.delay")) {
-            stack {
-                oneOrMore("wrong.method")
-                zeroOrMore(any)
-            }
+            oneOrMore("wrong.method")
+            zeroOrMore(any)
         }
         suspendMatcherFAIL(matcherFail)
     }
@@ -174,12 +152,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testWrongStateDoesntMatch() {
         val matcher = coroutine("foo#1", Running()) {
-            stack {
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
-                method("MainKt.testInner")
-                method("MainKt.test")
-                method("MainKt\$main\$1.invoke")
-            }
+            method("kotlinx.coroutines.experimental.DelayKt.delay\$default", "Delay.kt", 85)
+            method("MainKt.testInner")
+            method("MainKt.test")
+            method("MainKt\$main\$1.invoke")
         }
         suspendMatcherFAIL(matcher)
     }
@@ -187,8 +163,6 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testEmptyStackDoesntMatch() {
         val matcher = coroutine("foo#1", Running()) {
-            stack {
-            }
         }
         suspendMatcherFAIL(matcher)
     }
@@ -197,12 +171,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooIgnoreThread() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("foo#2", true)
-                3.methods(any) //infrastructure
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("foo#2", true)
+            3.methods(any) //infrastructure
         }
         runningFooMatcherOK(matcher)
     }
@@ -210,12 +182,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooCheckThread() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("foo#2", true)
-                3.methods(any) //infrastructure
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("foo#2", true)
+            3.methods(any) //infrastructure
         }
         runningFooMatcherOK(matcher)
     }
@@ -223,11 +193,9 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooAnyMarkerAny() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                oneOrMore(any)
-                marker("foo#2", true)
-                3.methods(any) //infrastructure
-            }
+            oneOrMore(any)
+            marker("foo#2", true)
+            3.methods(any) //infrastructure
         }
         runningFooMatcherOK(matcher)
     }
@@ -236,14 +204,12 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooWrongInfrastructureDoesntMatch() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("foo#2", true)
-                method(any)
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method(any)
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("foo#2", true)
+            method(any)
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method(any)
         }
         runningFooMatcherFAIL(matcher)
     }
@@ -251,12 +217,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooWrongThreadDoesntMatch() {
         val matcher = coroutine("foo#2", Running("Wrong thread")) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("foo#2", true)
-                3.methods(any) //infrastructure
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("foo#2", true)
+            3.methods(any) //infrastructure
         }
         runningFooMatcherFAIL(matcher)
     }
@@ -264,12 +228,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooWrongMarkerDoesntMatch() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("wrong marker", true)
-                3.methods(any) //infrastructure
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("wrong marker", true)
+            3.methods(any) //infrastructure
         }
         runningFooMatcherFAIL(matcher)
     }
@@ -277,12 +239,10 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooWrongMarkerDoesntMatch2() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                marker("foo#2", true)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                3.methods(any) //infrastructure
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            marker("foo#2", true)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            3.methods(any) //infrastructure
         }
         runningFooMatcherFAIL(matcher)
     }
@@ -290,13 +250,11 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooTooManyMarkerDoesntMatch() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("foo#2", true)
-                marker("foo#2", true)
-                3.methods(any) //infrastructure
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("foo#2", true)
+            marker("foo#2", true)
+            3.methods(any) //infrastructure
         }
         runningFooMatcherFAIL(matcher)
     }
@@ -304,11 +262,9 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooWithoutMarkerDoesntMatch() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                3.methods(any) //infrastructure
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            3.methods(any) //infrastructure
         }
         runningFooMatcherFAIL(matcher)
     }
@@ -317,13 +273,11 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooBarOK1() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                zeroOrMore(any)
-                marker("foo#2", true)
-                zeroOrMore(any)
-                marker("bar#1")
-                zeroOrMore(any)
-            }
+            zeroOrMore(any)
+            marker("foo#2", true)
+            zeroOrMore(any)
+            marker("bar#1")
+            zeroOrMore(any)
         }
         runningFooBarMatcherOK(matcher)
     }
@@ -331,15 +285,13 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooBarOK2() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                2.methods(any)
-                marker("foo#2", true)
-                3.methods(any) //infrastructure
-                2.methods(any) //coroutine bar#1
-                marker("bar#1")
-                3.methods(any) //infrastructure
-                method(any)
-            }
+            2.methods(any)
+            marker("foo#2", true)
+            3.methods(any) //infrastructure
+            2.methods(any) //coroutine bar#1
+            marker("bar#1")
+            3.methods(any) //infrastructure
+            method(any)
         }
         runningFooBarMatcherOK(matcher)
     }
@@ -347,17 +299,15 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooBarOK3() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("foo#2", true)
-                3.methods(any) //infrastructure
-                method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
-                method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
-                marker("bar#1")
-                3.methods(any) //infrastructure
-                method("plane.kotlin.call", "Main.kt", 10)
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("foo#2", true)
+            3.methods(any) //infrastructure
+            method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
+            method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
+            marker("bar#1")
+            3.methods(any) //infrastructure
+            method("plane.kotlin.call", "Main.kt", 10)
         }
         runningFooBarMatcherOK(matcher)
     }
@@ -366,17 +316,15 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooBarFail1() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("foo#2", true)
-                3.methods(any) //infrastructure
-                method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
-                method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
-                marker("bar#1")
-                2.methods(any) //should be 3.methods(any)
-                method("plane.kotlin.call", "Main.kt", 10)
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("foo#2", true)
+            3.methods(any) //infrastructure
+            method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
+            method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
+            marker("bar#1")
+            2.methods(any) //should be 3.methods(any)
+            method("plane.kotlin.call", "Main.kt", 10)
         }
         runningFooBarMatcherFAIL(matcher)
     }
@@ -384,17 +332,15 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooBarWrongSelfMarkerDoesntMatch() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("foo#2")
-                3.methods(any) //infrastructure
-                method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
-                method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
-                marker("bar#1", true)
-                3.methods(any) //infrastructure
-                method("plane.kotlin.call", "Main.kt", 10)
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("foo#2")
+            3.methods(any) //infrastructure
+            method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
+            method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
+            marker("bar#1", true)
+            3.methods(any) //infrastructure
+            method("plane.kotlin.call", "Main.kt", 10)
         }
         runningFooBarMatcherFAIL(matcher)
     }
@@ -402,17 +348,15 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooBarTwoSelfMarkersDoesntMatch() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("foo#2", true)
-                3.methods(any) //infrastructure
-                method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
-                method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
-                marker("bar#1", true)
-                3.methods(any) //infrastructure
-                method("plane.kotlin.call", "Main.kt", 10)
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("foo#2", true)
+            3.methods(any) //infrastructure
+            method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
+            method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
+            marker("bar#1", true)
+            3.methods(any) //infrastructure
+            method("plane.kotlin.call", "Main.kt", 10)
         }
         runningFooBarMatcherFAIL(matcher)
     }
@@ -420,17 +364,15 @@ class CoroutineMatcherDSLTest {
     @Test
     fun testRunningFooBarFlippedMarkersDoesntMatch() {
         val matcher = coroutine("foo#2", Running()) {
-            stack {
-                method("coroutine.foo.whatever", "Foo.kt", 42)
-                method("coroutine.foo.other", "Foo.kt", 37)
-                marker("bar#1", true)
-                3.methods(any) //infrastructure
-                method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
-                method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
-                marker("foo#2")
-                3.methods(any) //infrastructure
-                method("plane.kotlin.call", "Main.kt", 10)
-            }
+            method("coroutine.foo.whatever", "Foo.kt", 42)
+            method("coroutine.foo.other", "Foo.kt", 37)
+            marker("bar#1", true)
+            3.methods(any) //infrastructure
+            method("coroutine.bar.blah\$1.launchFoo", "Bar.kt", 50)
+            method("coroutine.bar.blah\$1.invoke", "Bar.kt", 30)
+            marker("foo#2")
+            3.methods(any) //infrastructure
+            method("plane.kotlin.call", "Main.kt", 10)
         }
         runningFooBarMatcherFAIL(matcher)
     }
