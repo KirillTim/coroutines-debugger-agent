@@ -29,64 +29,72 @@ object SimpleTestMethods {
     }
 }
 
+val TEST_PACKAGE_PREFIX = "kotlinx.coroutines.debug.test"
+val COROUTINES_STDLIB_PREFIX = "kotlinx.coroutines.experimental"
+
 class SimpleTest : TestBase() {
     @Test
     fun delayTest1() {
-        expectNextSuspendedState(suspended(Id(1),
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", file = "Delay.kt", line = 85),
-                method("kotlinx.coroutines.debug.test.SimpleTestMethods.defaultArgs"),
-                method("kotlinx.coroutines.debug.test.SimpleTestMethods.defaultArgs\$default"),
-                method("kotlinx.coroutines.debug.test.SimpleTest\$delayTest1\$result\$1.invoke")))
-        expectNextSuspendedState(suspended(Id(1),
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default", file = "Delay.kt", line = 85),
-                method("kotlinx.coroutines.debug.test.SimpleTestMethods.tailNamedDelay"),
-                method("kotlinx.coroutines.debug.test.SimpleTestMethods.defaultArgs"),
-                method("kotlinx.coroutines.debug.test.SimpleTestMethods.defaultArgs\$default"),
-                method("kotlinx.coroutines.debug.test.SimpleTest\$delayTest1\$result\$1.invoke")))
+        expectNextSuspendedState(coroutine("coroutine#1", Suspended("$COROUTINES_STDLIB_PREFIX.DelayKt.delay")) {
+            method("$COROUTINES_STDLIB_PREFIX.DelayKt.delay\$default", "Delay.kt", 85)
+            method("$TEST_PACKAGE_PREFIX.SimpleTestMethods.defaultArgs")
+            method("$TEST_PACKAGE_PREFIX.SimpleTestMethods.defaultArgs\$default")
+            method("$TEST_PACKAGE_PREFIX.SimpleTest\$delayTest1\$result\$1.invoke")
+        })
+        expectNextSuspendedState(coroutine("coroutine#1", Suspended("$COROUTINES_STDLIB_PREFIX.DelayKt.delay")) {
+            method("$COROUTINES_STDLIB_PREFIX.DelayKt.delay\$default", "Delay.kt", 85)
+            method("$TEST_PACKAGE_PREFIX.SimpleTestMethods.tailNamedDelay")
+            method("$TEST_PACKAGE_PREFIX.SimpleTestMethods.defaultArgs")
+            method("$TEST_PACKAGE_PREFIX.SimpleTestMethods.defaultArgs\$default")
+            method("$TEST_PACKAGE_PREFIX.SimpleTest\$delayTest1\$result\$1.invoke")
+        })
         val result = runBlocking {
             SimpleTestMethods.defaultArgs()
         }
         Assert.assertEquals(42, result)
-        expectStateEmpty()
+        expectNoCoroutines()
     }
 
     @Test
     fun testLambdaCreatedInside1() {
-        expectNextSuspendedState(suspended(Id(1),
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                method("kotlinx.coroutines.debug.test.SimpleTest\$testLambdaCreatedInside1\$result\$1\$lambda\$1.invoke"),
-                method("kotlinx.coroutines.debug.test.SimpleTest\$testLambdaCreatedInside1\$result\$1.invoke")))
+        expectNextSuspendedState(coroutine("coroutine#1", Suspended("$COROUTINES_STDLIB_PREFIX.DelayKt.delay")) {
+            method("$COROUTINES_STDLIB_PREFIX.DelayKt.delay\$default")
+            method("$TEST_PACKAGE_PREFIX.SimpleTest\$testLambdaCreatedInside1\$result\$1\$lambda\$1.invoke")
+            method("$TEST_PACKAGE_PREFIX.SimpleTest\$testLambdaCreatedInside1\$result\$1.invoke")
+        })
         val result = runBlocking {
             val lambda: suspend () -> Unit = { delay(10) }
             lambda()
             42
         }
         Assert.assertEquals(42, result)
-        expectStateEmpty()
+        expectNoCoroutines()
     }
 
     @Test
     fun testNamedCoroutine() {
-        expectNextSuspendedState(suspended(Name("named #1"),
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                method("kotlinx.coroutines.debug.test.SimpleTest\$testNamedCoroutine\$result\$1\$lambda\$1.invoke"),
-                method("kotlinx.coroutines.debug.test.SimpleTest\$testNamedCoroutine\$result\$1.invoke")))
+        expectNextSuspendedState(coroutine("named#1", Suspended()) {
+            method("$COROUTINES_STDLIB_PREFIX.DelayKt.delay\$default")
+            method("$TEST_PACKAGE_PREFIX.SimpleTest\$testNamedCoroutine\$result\$1\$lambda\$1.invoke")
+            method("$TEST_PACKAGE_PREFIX.SimpleTest\$testNamedCoroutine\$result\$1.invoke")
+        })
         val result = runBlocking(EmptyCoroutineContext + CoroutineName("named"), {
             val lambda: suspend () -> Unit = { delay(10) }
             lambda()
             42
         })
         Assert.assertEquals(42, result)
-        expectStateEmpty()
+        expectNoCoroutines()
     }
 
     @Test
     fun testLambdaCreatedInside2() {
         (1..2).forEach {
-            expectNextSuspendedState(suspended(Id(1),
-                    method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                    method("kotlinx.coroutines.debug.test.SimpleTest\$testLambdaCreatedInside2\$result\$1\$lambda\$1.invoke"),
-                    method("kotlinx.coroutines.debug.test.SimpleTest\$testLambdaCreatedInside2\$result\$1.invoke")))
+            expectNextSuspendedState(coroutine("coroutine#1", Suspended()) {
+                method("$COROUTINES_STDLIB_PREFIX.DelayKt.delay\$default")
+                method("$TEST_PACKAGE_PREFIX.SimpleTest\$testLambdaCreatedInside2\$result\$1\$lambda\$1.invoke")
+                method("$TEST_PACKAGE_PREFIX.SimpleTest\$testLambdaCreatedInside2\$result\$1.invoke")
+            })
         }
         val result = runBlocking {
             val lambda: suspend () -> Unit = {
@@ -97,7 +105,7 @@ class SimpleTest : TestBase() {
             42
         }
         Assert.assertEquals(42, result)
-        expectStateEmpty()
+        expectNoCoroutines()
     }
 
     @Test
@@ -110,14 +118,16 @@ class SimpleTest : TestBase() {
             val lambda: suspend () -> Unit = {
                 lambdaThrow()
             }
-            expectNextSuspendedState(suspended(Id(1),
-                    method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                    method("kotlinx.coroutines.debug.test.SimpleTest\$testReturnFromSuspendFunction\$result\$1\$lambdaThrow\$1.invoke"),
-                    method("kotlinx.coroutines.debug.test.SimpleTest\$testReturnFromSuspendFunction\$result\$1\$lambda\$1.invoke"),
-                    method("kotlinx.coroutines.debug.test.SimpleTest\$testReturnFromSuspendFunction\$result\$1.invoke")))
-            expectNextSuspendedState(suspended(Id(1),
-                    method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                    method("kotlinx.coroutines.debug.test.SimpleTest\$testReturnFromSuspendFunction\$result\$1.invoke")))
+            expectNextSuspendedState(coroutine("coroutine#1", Suspended()) {
+                method("$COROUTINES_STDLIB_PREFIX.DelayKt.delay\$default")
+                method("$TEST_PACKAGE_PREFIX.SimpleTest\$testReturnFromSuspendFunction\$result\$1\$lambdaThrow\$1.invoke")
+                method("$TEST_PACKAGE_PREFIX.SimpleTest\$testReturnFromSuspendFunction\$result\$1\$lambda\$1.invoke")
+                method("$TEST_PACKAGE_PREFIX.SimpleTest\$testReturnFromSuspendFunction\$result\$1.invoke")
+            })
+            expectNextSuspendedState(coroutine("coroutine#1", Suspended()) {
+                method("$COROUTINES_STDLIB_PREFIX.DelayKt.delay\$default")
+                method("$TEST_PACKAGE_PREFIX.SimpleTest\$testReturnFromSuspendFunction\$result\$1.invoke")
+            })
             try {
                 lambda()
             } catch (ignore: Exception) {
@@ -126,7 +136,7 @@ class SimpleTest : TestBase() {
             42
         }
         Assert.assertEquals(42, result)
-        expectStateEmpty()
+        expectNoCoroutines()
     }
 
     @Test
@@ -136,15 +146,16 @@ class SimpleTest : TestBase() {
 
     @Test
     fun testInlineNamedSuspend() {
-        expectNextSuspendedState(suspended(Id(1),
-                method("kotlinx.coroutines.experimental.DelayKt.delay\$default"),
-                method("kotlinx.coroutines.debug.test.SimpleTestMethods\$tailLambda\$1.invoke"),
-                method("kotlinx.coroutines.debug.test.SimpleTest\$testInlineNamedSuspend\$result\$1.invoke")))
+        expectNextSuspendedState(coroutine("coroutine#1", Suspended()) {
+            method("$COROUTINES_STDLIB_PREFIX.DelayKt.delay\$default")
+            method("$TEST_PACKAGE_PREFIX.SimpleTestMethods\$tailLambda\$1.invoke")
+            method("$TEST_PACKAGE_PREFIX.SimpleTest\$testInlineNamedSuspend\$result\$1.invoke")
+        })
         val result = runBlocking {
             SimpleTestMethods.inlineTest(42)
         }
         Assert.assertEquals(42, result)
-        expectStateEmpty()
+        expectNoCoroutines()
     }
 }
 

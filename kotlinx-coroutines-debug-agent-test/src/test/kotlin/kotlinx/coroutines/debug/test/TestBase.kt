@@ -2,198 +2,82 @@ package kotlinx.coroutines.debug.test
 
 import com.sun.tools.attach.VirtualMachine
 import kotlinx.coroutines.debug.manager.*
+import kotlinx.coroutines.debug.manager.Suspended
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
 import org.junit.BeforeClass
 import java.lang.management.ManagementFactory
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
 
-/**
- * @author Kirill Timofeev
- */
+data class ExpectedState(val coroutines: List<Coroutine>)
 
-sealed class CoroutineId
+private val NAME_AND_STATUS_FROM_COROUTINE_DUMP =
+        "^\\\"(.+)\\\".*\n {2}Status:\\s([A-Za-z]+).*\n.*".toRegex(RegexOption.DOT_MATCHES_ALL)
 
-data class Id(val id: Int) : CoroutineId() {
-    override fun toString() = "coroutine#$id"
+private fun extractNameFromCoroutineDump(dump: String): String {
+    val (_, name, _) = requireNotNull(NAME_AND_STATUS_FROM_COROUTINE_DUMP.find(dump)?.groupValues,
+            { "Can't extract name and status from '$dump'" })
+    return name
 }
 
-data class Name(val name: String) : CoroutineId() {
-    override fun toString() = name
-}
+fun assertDebuggerPausedHereState(vararg expected: Coroutine) =
+        assertMatches(expected.toList(), extractFixedCoroutineDumpsAsInDebugger())
 
-data class ExpectedMethod(
-        val method: String,
-        val desc: String? = null,
-        val file: String? = null,
-        val line: Int? = null
-) {
-    fun isStackTraceElement(element: StackTraceElement): Boolean {
-        val owner = method.split('.').dropLast(1).joinToString(".")
-        val name = method.split('.').last()
-        return owner == element.className
-                && name == element.methodName
-                && (file == null || file == element.fileName)
-                && (line == null || line == element.lineNumber)
-    }
-
-    override fun toString() = buildString {
-        append(method)
-        if (desc != null) append(" $desc")
-        if (file != null) append(" at $file")
-        if (line != null) append(":$line")
-    }
-}
-
-fun method(method: String, desc: String? = null, file: String? = null, line: Int? = null) =
-        ExpectedMethod(method, desc, file, line)
-
-sealed class ExpectedCoroutineState(
-        open val id: CoroutineId,
-        val status: CoroutineStatus,
-        open val stack: List<ExpectedMethod>? = null)
-
-data class SuspendedCoroutine(override val id: CoroutineId, override val stack: List<ExpectedMethod>)
-    : ExpectedCoroutineState(id, CoroutineStatus.Suspended, stack)
-
-data class RunningCoroutine(override val id: CoroutineId)
-    : ExpectedCoroutineState(id, CoroutineStatus.Running, null)
-
-fun suspended(id: CoroutineId, vararg stack: ExpectedMethod) = SuspendedCoroutine(id, stack.toList())
-
-fun running(id: CoroutineId) = RunningCoroutine(id)
-
-data class ExpectedState(val coroutines: List<ExpectedCoroutineState>) {
-    private fun filterStatuses(statuses: Collection<CoroutineStatus>) =
-            statuses.filter { it == CoroutineStatus.Suspended || it == CoroutineStatus.Running }
-
-    fun assertEquals(snapshot: List<CoroutineInfo>) {
-        val expectedByStateAndName = coroutines.groupBy { state -> state.status }
-                .map { (status, state) -> status to state.map { "${it.id}" to it.stack }.toMap() }
-                .toMap()
-        val actualByStateAndName = snapshot.groupBy { it.status }
-                .map { (status, state) -> status to state.map { it.name to it }.toMap() }
-                .toMap()
-        Assert.assertEquals(expectedByStateAndName.keys.toList(), filterStatuses(actualByStateAndName.keys).toList())
-        for (status in expectedByStateAndName.keys) {
-            assertEqualsForState(expectedByStateAndName[status]!!, actualByStateAndName[status]!!)
-        }
-    }
-
-    private fun assertEqualsForState(
-            expected: Map<String, List<ExpectedMethod>?>,
-            actual: Map<String, CoroutineInfo>
-    ) {
-        Assert.assertEquals(expected.keys.toHashSet(), actual.keys.toHashSet())
-        for ((name, expectedStack) in expected) {
-            if (expectedStack == null) continue
-            val actualStack = actual[name]!!.labeledCurrentThreadStack.filterIsInstance<STEItem>()
-            val stacksMatch = expectedStack.size == actualStack.size &&
-                    expectedStack.withIndex().all { (i, element) -> element.isStackTraceElement(actualStack[i].ste) }
-            val message = buildString {
-                append("expected:\n")
-                append(expectedStack.joinToString("\n"))
-                append("\n")
-                append("actual:\n")
-                append(actualStack.joinToString("\n"))
-                append("\n")
-            }
-            Assert.assertTrue(message, stacksMatch)
-        }
-    }
-}
-
-fun expectedState(vararg coroutines: ExpectedCoroutineState) = ExpectedState(coroutines.toList())
+val TEST_BASE_CLASS_NAME = "kotlinx.coroutines.debug.test.TestBaseKt"
 
 typealias CoroutineName = String
-fun checkLikeInDebugPausedHereStateDump(vararg expected: Pair<CoroutineName, Regex>) {
+typealias Dump = String
+private fun extractFixedCoroutineDumpsAsInDebugger(): Map<CoroutineName, Dump> {
     val dump = likeInDebugTextStateDump()
-    val coroutineDumps = dump.substring(dump.indexOf('\n') + 1) //drop header
+    return dump.substring(dump.indexOf('\n') + 1) //drop header
             .split("\n\n").dropLast(1).map {
-        //"(<name>)" <additional info>\n(<status>\n<stack>)
-        val pattern = "^\\\"(.+)\\\".*\n( {2}Status:\\s[A-Za-z]+.*\n.*)".toRegex(RegexOption.DOT_MATCHES_ALL)
-        var (_, name, info) = requireNotNull(pattern.find(it)?.groupValues, { "Can't parse coroutine dump:\n $dump" })
-        if (info.toLowerCase().startsWith("  status: running")) //remove `checkLikeInDebugPausedHereStateDump` call from stacktrace
-            info = info.split("\n").toMutableList().apply { removeAt(1) }.joinToString("\n")
-        name to info
+        var (currentDump, name, status) = requireNotNull(NAME_AND_STATUS_FROM_COROUTINE_DUMP.find(it)?.groupValues,
+                { "Can't parse coroutine dump:\n $dump" })
+        if (status.toLowerCase() == "running") {
+            val parts = currentDump.split('\n')
+            var index = 2 //top stack frame
+            while (parts[index].startsWith("    at $TEST_BASE_CLASS_NAME")) {
+                index++
+            }
+            currentDump = (parts.take(2) + parts.drop(index)).joinToString("\n")
+        }
+        name to currentDump
     }.toMap()
-    Assert.assertEquals(expected.map { it.first }.toSet().toList(), coroutineDumps.keys.toList())
-    for ((name, pattern) in expected) {
-        requireNotNull(pattern.matchEntire(coroutineDumps[name]!!),
-                { "Pattern mismatched for '$name'.\npattern: $pattern\ndump: ${coroutineDumps[name]!!}" })
-    }
 }
 
 private fun likeInDebugTextStateDump(): String =
         Class.forName("kotlinx.coroutines.debug.manager.StacksManager")
                 .getDeclaredMethod("getFullDumpString").invoke(null) as String
 
+private fun assertMatches(expected: List<Coroutine>, actual: Map<CoroutineName, Dump>) {
+    Assert.assertTrue("expected: ${expected.map { it.name }}, got: ${actual.keys}",
+            expected.map { it.name }.toSet() == actual.keys.toSet())
+    for (coroutine in expected) {
+        val dump = actual[coroutine.name]!!.trim('\n')
+        val message = buildString {
+            append(coroutine.pattern.joinToString("\n", "expected:\n", "\n") { it.symbol.string })
+            append("actual:\n$dump")
+        }
+        Assert.assertTrue(message, coroutine.matchEntireString(dump))
+    }
+}
+
 open class TestBase {
-
-    private var actionIndex = AtomicInteger()
-    private var finished = AtomicBoolean()
-    private var error = AtomicReference<Throwable>()
-
-    /**
-     * Throws [IllegalStateException] like `error` in stdlib, but also ensures that the test will not
-     * complete successfully even if this exception is consumed somewhere in the test.
-     */
-    fun error(message: Any): Nothing {
-        val exception = IllegalStateException(message.toString())
-        error.compareAndSet(null, exception)
-        throw exception
-    }
-
-    /**
-     * Throws [IllegalStateException] when `value` is false like `check` in stdlib, but also ensures that the
-     * test will not complete successfully even if this exception is consumed somewhere in the test.
-     */
-    inline fun check(value: Boolean, lazyMessage: () -> Any): Unit {
-        if (!value) error(lazyMessage())
-    }
-
-    /**
-     * Asserts that this invocation is `index`-th in the execution sequence (counting from one).
-     */
-    fun expect(index: Int) {
-        val wasIndex = actionIndex.incrementAndGet()
-        check(index == wasIndex) { "Expecting action index $index but it is actually $wasIndex" }
-    }
-
-    /**
-     * Asserts that this line is never executed.
-     */
-    fun expectUnreached() {
-        error("Should not be reached")
-    }
-
-    /**
-     * Asserts that this it the last action in the test. It must be invoked by any test that used [expect].
-     */
-    fun finish(index: Int) {
-        expect(index)
-        check(!finished.getAndSet(true)) { "Should call 'finish(...)' at most once" }
-    }
-
     private var stateIndex = AtomicInteger(0)
 
-    private val onStateChanged = { manager: StacksManager, event: StackChangedEvent, context: WrappedContext ->
+    private val onStateChanged = { manager: StacksManager, event: StackChangedEvent, _: WrappedContext ->
         if (event == Suspended) {
             val currentState = stateIndex.getAndIncrement()
             val expected = expectedStates[currentState]
-            if (expected == null) {
-                println("no check for state: $currentState")
-            } else {
-                val snapshot = manager.getSnapshot().coroutines.map {
-                    it.coroutineInfo(Thread.currentThread(), Configuration.Run)
-                }.toList()
-                expected.assertEquals(snapshot)
+            if (expected == null) println("no check for state: $currentState")
+            else {
+                val actual = manager.getSnapshot().coroutines.filter { it.status is CoroutineStatus.Suspended }
+                        .map { it.coroutineInfo(Thread.currentThread(), Configuration.Debug).toString() }
+                        .map { extractNameFromCoroutineDump(it) to it }.toMap()
+                assertMatches(expected.coroutines, actual)
             }
-
         }
     }
 
@@ -208,8 +92,6 @@ open class TestBase {
         Assert.assertTrue("exceptions were thrown: ${exceptions.toList()}", exceptions.isEmpty())
         exceptions.clear()
         StacksManager.removeOnStackChangedCallback(onStateChanged)
-        error.get()?.let { throw it }
-        check(actionIndex.get() == 0 || finished.get()) { "Expecting that 'finish(...)' was invoked, but it was not" }
     }
 
     companion object {
@@ -224,10 +106,7 @@ open class TestBase {
         }
 
         @JvmStatic
-        private fun loadAgent() = loadAgent(AGENT_JAR_PATH, AGENT_ARGUMENTS)
-
-        @JvmStatic
-        private fun loadAgent(agentJarPath: String, agentArguments: String) {
+        private fun loadAgent(agentJarPath: String = AGENT_JAR_PATH, agentArguments: String = AGENT_ARGUMENTS) {
             val nameOfRunningVM = ManagementFactory.getRuntimeMXBean().name
             val pid = nameOfRunningVM.substring(0, nameOfRunningVM.indexOf('@'))
             val vm = VirtualMachine.attach(pid)
@@ -238,13 +117,15 @@ open class TestBase {
         private var expectedStates = ConcurrentHashMap<Int, ExpectedState>()
         private val nextExpectedIndex = AtomicInteger(0)
 
-        fun expectStateEmpty() = synchronized(this) {
-            Assert.assertTrue("expected empty, got: ${StacksManager.getSnapshot().coroutines}",
-                    StacksManager.getSnapshot().coroutines.isEmpty())
+        fun expectNoCoroutines(customFilter: CoroutineSnapshot.() -> Boolean = { true }) {
+            val coroutines = StacksManager.getSnapshot().coroutines.filter(customFilter)
+            Assert.assertTrue("expected nothing, got: $coroutines", coroutines.isEmpty())
         }
 
-        fun expectNextSuspendedState(vararg states: ExpectedCoroutineState) = synchronized(this) {
-            expectedStates[nextExpectedIndex.getAndIncrement()] = expectedState(*states)
+        fun expectNoSuspendCoroutines() = expectNoCoroutines({ status is CoroutineStatus.Suspended })
+
+        fun expectNextSuspendedState(vararg coroutines: Coroutine) {
+            expectedStates[nextExpectedIndex.getAndIncrement()] = ExpectedState(coroutines.toList())
         }
     }
 }

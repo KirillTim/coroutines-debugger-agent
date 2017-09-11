@@ -44,7 +44,7 @@ abstract class FullStringMatcher : WithMatchablePattern<RegexStringMatcher>() {
 
 class Coroutine(val name: String, val status: Status) : FullStringMatcher() {
     override val pattern: MutableList<Token<RegexStringMatcher>>
-            = mutableListOf(Single(RegexStringMatcher("\\\"$name\\\".*")), Single(RegexStringMatcher(status)))
+            = mutableListOf(Single(RegexStringMatcher("\\\"${name.q}\\\".*")), Single(RegexStringMatcher(status)))
 
     val any = StackElement(null)
     fun Int.methods(element: StackElement) =
