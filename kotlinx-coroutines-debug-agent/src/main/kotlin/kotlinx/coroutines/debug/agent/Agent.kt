@@ -60,39 +60,27 @@ private fun addSignalHandler(agentArgs: String?) { //FIXME?
         val coroutineDump = StacksManager.getSnapshot().fullCoroutineDump(Configuration.Run)
         System.err.println(coroutineDump.toString())
     })
-    val nameOfRunningVM = ManagementFactory.getRuntimeMXBean().name
-    val pid = nameOfRunningVM.substring(0, nameOfRunningVM.indexOf('@'))
+    val pid = with(ManagementFactory.getRuntimeMXBean().name) { substring(0, indexOf('@')) }
     info { "Add ${signal.name}(${signal.number}) signal handler, my pid is $pid" }
 }
 
 private fun tryConfigureLogger(agentArgs: String?) {
-    val levelValue = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("loglevel=") }?.split('=')?.get(1)
-    val logLevel = levelValue?.let {
-        if (!LogLevel.values().map { it.name }.contains(levelValue.toUpperCase())) {
-            error { "Unknown log level '$levelValue' in agent arguments" }
+    val EVENTS_DEBUG_LOG_FILE = "all-events.debug.log"
+    val logLevel = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("loglevel=") }
+            ?.split('=')?.get(1)?.let { value ->
+        try {
+            LogLevel.valueOf(value.toUpperCase())
+        } catch (e: IllegalArgumentException) {
+            error { "Unknown log level '$value' in agent arguments" }
             LogLevel.INFO
-        } else LogLevel.valueOf(levelValue.toUpperCase())
+        }
     } ?: LogLevel.INFO
-    val logFileValue = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("logfile=") }?.split('=')?.get(1)
-    val logFileOutputStream = logFileValue?.let { FileOutputStream(it) }
-    val dataFileValue = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("datafile=") }?.split('=')?.get(1)
-    val dataFileOutputStreams = listOfNotNull(//'datafile=' argument supress data output (data {...} )
-            if (dataFileValue == logFileValue) logFileOutputStream
-            else dataFileValue?.let {
-                try {
-                    FileOutputStream(it)
-                } catch (e: Exception) {
-                    null
-                }
-            }
-    )
-    Logger.config = if (logFileOutputStream != null) {
+    val logFileOutputStream = agentArgs?.split(',')?.find { it.toLowerCase().startsWith("logfile=") }
+            ?.split('=')?.get(1)?.let { FileOutputStream(it) }
+    val dataFileOutputStream = if (logLevel <= LogLevel.DEBUG) FileOutputStream(EVENTS_DEBUG_LOG_FILE) else null
+    Logger.config = logFileOutputStream?.let {
         logToFile(logLevel, withTime = true, logFileOutputStream = logFileOutputStream,
-                dataConsumers = dataFileOutputStreams)
-    } else {
-        if (dataFileOutputStreams.isNotEmpty() || dataFileValue != null)
-            LoggerConfig(logLevel, withTime = true, dataConsumers = dataFileOutputStreams)
-        else LoggerConfig(logLevel)
-    }
+                dataConsumers = listOfNotNull(dataFileOutputStream))
+    } ?: LoggerConfig(logLevel, withTime = true, dataConsumers = listOfNotNull(dataFileOutputStream))
 }
 
