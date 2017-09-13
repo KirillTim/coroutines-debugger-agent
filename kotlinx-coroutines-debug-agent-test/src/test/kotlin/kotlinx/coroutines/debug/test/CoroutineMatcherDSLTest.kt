@@ -3,9 +3,6 @@ package kotlinx.coroutines.debug.test
 import org.junit.Assert
 import org.junit.Test
 
-/**
- * @author Kirill Timofeev
- */
 class CoroutineMatcherDSLTest {
     private val suspendFoo = "\"foo#1\" [...]\n" +
             "  Status: Suspended at kotlinx.coroutines.experimental.DelayKt.delay\n" +

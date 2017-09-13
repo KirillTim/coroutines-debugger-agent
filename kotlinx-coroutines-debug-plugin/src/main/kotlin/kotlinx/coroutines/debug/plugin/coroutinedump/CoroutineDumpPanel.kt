@@ -31,9 +31,6 @@ import javax.swing.*
 import javax.swing.event.DocumentEvent
 
 /**
- * @author Kirill Timofeev
- */
-/**
  * @see [com.intellij.unscramble.ThreadDumpPanel]
  */
 class CoroutineDumpPanel(

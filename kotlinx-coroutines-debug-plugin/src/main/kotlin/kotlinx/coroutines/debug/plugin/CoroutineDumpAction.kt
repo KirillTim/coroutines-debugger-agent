@@ -25,9 +25,6 @@ import kotlinx.coroutines.debug.plugin.coroutinedump.CoroutineDumpPanel
 import kotlinx.coroutines.debug.plugin.coroutinedump.CoroutineDumpParser
 import sun.misc.Signal
 
-/**
- * @author Kirill Timofeev
- */
 class CoroutineDumpAction : AnAction(), AnAction.TransparentUpdate {
     override fun actionPerformed(e: AnActionEvent) {
         println("CoroutineDumpAction.actionPerformed($e)")

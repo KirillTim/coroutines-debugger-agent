@@ -4,10 +4,6 @@ import java.io.PrintWriter
 import java.io.StringWriter
 import java.lang.reflect.Modifier
 
-/**
- * @author Kirill Timofeev
- */
-
 fun Any?.toStringSafe() = try {
     toString()
 } catch (e: Throwable) {

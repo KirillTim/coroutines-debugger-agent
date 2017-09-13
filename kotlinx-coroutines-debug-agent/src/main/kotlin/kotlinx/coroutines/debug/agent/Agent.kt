@@ -8,10 +8,6 @@ import java.io.FileOutputStream
 import java.lang.instrument.Instrumentation
 import java.lang.management.ManagementFactory
 
-/**
- * @author Kirill Timofeev
- */
-
 class Agent {
     companion object {
         @JvmStatic

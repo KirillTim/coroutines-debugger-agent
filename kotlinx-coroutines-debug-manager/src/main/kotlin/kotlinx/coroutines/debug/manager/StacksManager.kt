@@ -7,10 +7,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.experimental.Continuation
 
-/**
- * @author Kirill Timofeev
- */
-
 val DEBUG_AGENT_PACKAGE_PREFIX = "kotlinx.coroutines.debug"
 
 val allSuspendCalls = AppendOnlyThreadSafeList<SuspendCall>()

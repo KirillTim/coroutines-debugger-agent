@@ -5,9 +5,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.experimental.Continuation
 import kotlin.coroutines.experimental.CoroutineContext
 
-/**
- * @author Kirill Timofeev
- */
 private sealed class FrameId(value: Continuation<Any?>) : WeakId<Continuation<Any?>>(value)
 
 val Any.prettyHash: String

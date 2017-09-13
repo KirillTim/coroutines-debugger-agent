@@ -1,8 +1,5 @@
 package kotlinx.coroutines.debug.manager
 
-/**
- * @author Kirill Timofeev
- */
 private fun StackTraceElement.rename() =
         if (methodName == "doResume") StackTraceElement(className, "invoke", fileName, lineNumber)
         else this

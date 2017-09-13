@@ -5,9 +5,6 @@ import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.ui.RunContentDescriptor
 
-/**
- * @author Kirill Timofeev
- */
 class WithAgentGenericDebuggerRunner : GenericDebuggerRunner() {
     override fun doExecute(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? {
         PathUtil.addJavaAgentVMParam(state)

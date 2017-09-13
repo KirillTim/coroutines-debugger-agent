@@ -2,9 +2,6 @@ package kotlinx.coroutines.debug.manager
 
 import kotlin.coroutines.experimental.Continuation
 
-/**
- * @author Kirill Timofeev
- */
 class WrappedCompletion(val completion: Continuation<Any?>) : Continuation<Any?> {
     override val context = completion.context
 

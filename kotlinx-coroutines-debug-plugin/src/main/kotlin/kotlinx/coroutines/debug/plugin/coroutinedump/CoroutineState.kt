@@ -3,9 +3,6 @@ package kotlinx.coroutines.debug.plugin.coroutinedump
 import com.intellij.icons.AllIcons
 import javax.swing.Icon
 
-/**
- * @author Kirill Timofeev
- */
 sealed class Status(val name: String, val code: Int, val icon: Icon) {
     companion object {
         fun byName(name: String) = when (name.toLowerCase()) {

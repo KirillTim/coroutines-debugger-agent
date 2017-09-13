@@ -3,9 +3,6 @@ package kotlinx.coroutines.debug.test
 import kotlinx.coroutines.debug.manager.CoroutineInfoItem
 import java.util.regex.Pattern
 
-/**
- * @author Kirill Timofeev
- */
 private val Any?.p: String
     get() = if (this == null) ".*" else "$this".q
 

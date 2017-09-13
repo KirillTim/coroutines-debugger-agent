@@ -8,10 +8,6 @@ import kotlin.coroutines.experimental.jvm.internal.CoroutineImpl
 
 var exceptions: AppendOnlyThreadSafeList<Throwable>? = null
 
-/**
- * @author Kirill Timofeev
- */
-
 // used from instrumented code
 fun handleAfterSuspendCall(result: Any, continuation: Continuation<Any?>, functionCallIndex: Int) {
     if (result !== COROUTINE_SUSPENDED) return

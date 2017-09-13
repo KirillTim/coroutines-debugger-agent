@@ -1,9 +1,5 @@
 package kotlinx.coroutines.debug.manager
 
-/**
- * @author Kirill Timofeev
- */
-
 data class MethodId(val name: String, val className: String, val desc: String) {
     init {
         check(!className.contains('/')) { "Must be a Java class name, not an internal name" }

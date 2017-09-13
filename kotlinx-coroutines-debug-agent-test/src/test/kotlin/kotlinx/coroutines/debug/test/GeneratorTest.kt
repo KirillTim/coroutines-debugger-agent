@@ -4,9 +4,6 @@ import org.junit.Assert
 import org.junit.Test
 import kotlin.coroutines.experimental.buildSequence
 
-/**
- * @author Kirill Timofeev
- */
 object GeneratorsTestMethods {
     fun repeatA() = buildSequence {
         while (true) {

@@ -6,10 +6,6 @@ import java.io.PrintWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
-/**
- * @author Kirill Timofeev
- */
-
 inline fun debug(msg: () -> Any?) = message(LogLevel.DEBUG, msg)
 
 inline fun info(msg: () -> Any?) = message(LogLevel.INFO, msg)

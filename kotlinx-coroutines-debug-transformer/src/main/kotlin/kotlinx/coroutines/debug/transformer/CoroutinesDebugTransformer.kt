@@ -11,10 +11,6 @@ import org.jetbrains.org.objectweb.asm.tree.MethodNode
 import java.lang.instrument.ClassFileTransformer
 import java.security.ProtectionDomain
 
-/**
- * @author Kirill Timofeev
- */
-
 private fun ClassNode.isCoroutineImplOrSubType() =
         name == COROUTINE_IMPL_TYPE.internalName || superName == COROUTINE_IMPL_TYPE.internalName
 

@@ -4,9 +4,6 @@ import org.junit.Test
 import java.util.*
 import kotlin.system.measureNanoTime
 
-/**
- * @author Kirill Timofeev
- */
 interface Matchable {
     fun match(other: Matchable): Boolean
 }

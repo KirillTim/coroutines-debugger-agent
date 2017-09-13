@@ -11,10 +11,6 @@ import org.jetbrains.org.objectweb.asm.util.TraceClassVisitor
 import java.io.PrintWriter
 import java.io.StringWriter
 
-/**
- * @author Kirill Timofeev
- */
-
 internal val OBJECT_TYPE = Type.getType(Any::class.java)
 internal val THROWABLE_TYPE = Type.getType(Throwable::class.java)
 internal val STRING_TYPE = Type.getType(String::class.java)

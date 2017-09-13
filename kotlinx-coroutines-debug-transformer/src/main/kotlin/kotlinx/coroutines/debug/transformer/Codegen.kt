@@ -5,9 +5,6 @@ import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
 import org.jetbrains.org.objectweb.asm.tree.InsnList
 import org.jetbrains.org.objectweb.asm.tree.MethodNode
 
-/**
- * @author Kirill Timofeev
- */
 private val EVENTS_HANDLER_CLASS_NAME = "kotlinx/coroutines/debug/manager/EventsHandler"
 private val AFTER_SUSPEND_CALL = "handleAfterSuspendCall"
 private val DO_RESUME_ENTER = "handleDoResumeEnter"

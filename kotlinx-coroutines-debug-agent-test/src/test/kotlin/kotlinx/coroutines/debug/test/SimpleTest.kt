@@ -7,9 +7,6 @@ import org.junit.Assert
 import org.junit.Test
 import kotlin.coroutines.experimental.EmptyCoroutineContext
 
-/**
- * @author Kirill Timofeev
- */
 object SimpleTestMethods {
     suspend fun defaultArgs(time: Long = 10): Int {
         delay(time)
