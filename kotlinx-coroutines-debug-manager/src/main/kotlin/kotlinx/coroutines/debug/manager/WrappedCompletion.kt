@@ -5,16 +5,16 @@ import kotlin.coroutines.experimental.Continuation
 /**
  * @author Kirill Timofeev
  */
-class WrappedCompletion(val completion: Continuation<Any?>?) : Continuation<Any?> {
-    override val context = completion!!.context
+class WrappedCompletion(val completion: WeakContinuation) : Continuation<Any?> {
+    override val context = completion.continuation!!.context
 
     override fun resume(value: Any?) {
         StacksManager.handleCoroutineExit(this)
-        completion!!.resume(value)
+        completion.continuation!!.resume(value)
     }
 
     override fun resumeWithException(exception: Throwable) {
         StacksManager.handleCoroutineExit(this)
-        completion!!.resumeWithException(exception)
+        completion.continuation!!.resumeWithException(exception)
     }
 }

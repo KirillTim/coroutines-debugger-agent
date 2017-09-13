@@ -8,17 +8,17 @@ import kotlin.coroutines.experimental.CoroutineContext
  * @author Kirill Timofeev
  */
 private sealed class FrameId {
-    abstract val value: Continuation<*>
+    abstract val value: WeakContinuation
 }
 
-val Continuation<*>.prettyHash: String
+val Any.prettyHash: String
     get() = System.identityHashCode(this).toString(16)
 
-private data class ContinuationId(override val value: Continuation<*>) : FrameId() {
+private data class ContinuationId(override val value: WeakContinuation) : FrameId() {
     override fun toString() = "Continuation(${value::class.java.name}@${value.prettyHash})"
 }
 
-private data class CompletionId(override val value: Continuation<*>) : FrameId() {
+private data class CompletionId(override val value: WeakContinuation) : FrameId() {
     override fun toString() = "Completion(${value::class.java.name}@${value.prettyHash})"
 }
 
@@ -55,16 +55,16 @@ sealed class CoroutineStatus(private val status: String) {
     object Suspended : CoroutineStatus("Suspended")
 }
 
-class CoroutineStack(private val initialCompletion: WrappedCompletion) {
+class CoroutineStack(val initialCompletion: WrappedCompletion) {
     val context: WrappedContext = initialCompletion.context.wrap()
     val name: String = context.name
     var thread: Thread = Thread.currentThread()
         private set
     var status: CoroutineStatus = CoroutineStatus.Created
         private set
-    var topFrameCompletion: Continuation<*> = initialCompletion //key to find stack for doResume
+    var topFrameCompletion: WeakContinuation = WeakContinuation(initialCompletion) //key to find stack for doResume
         private set
-    private var topContinuation: Continuation<*> = initialCompletion
+    private var topContinuation: WeakContinuation = topFrameCompletion
     private val stack = mutableListOf<CoroutineStackFrame>()
     private val unAppliedStack = mutableListOf<CoroutineStackFrame>()
 
@@ -73,9 +73,9 @@ class CoroutineStack(private val initialCompletion: WrappedCompletion) {
     /**
      * @return true if new frames were add to stack, false otherwise
      */
-    fun handleSuspendFunctionReturn(completion: Continuation<*>, call: SuspendCall): Boolean {
-        unAppliedStack.add(CoroutineStackFrame(CompletionId(completion), call))
-        if (completion === topContinuation && (call.fromMethod == stack.first().call.method
+    fun handleSuspendFunctionReturn(completion: Continuation<Any?>, call: SuspendCall): Boolean {
+        unAppliedStack.add(CoroutineStackFrame(CompletionId(WeakContinuation(completion)), call))
+        if (completion === topContinuation.continuation && (call.fromMethod == stack.first().call.method
                 || call.fromMethod.name == "doResume" && stack.first().call.method.name == "invoke")) {
             applyStack()
             return true
@@ -100,26 +100,27 @@ class CoroutineStack(private val initialCompletion: WrappedCompletion) {
     }
 
     fun handleDoResume(
-            completion: Continuation<*>,
-            continuation: Continuation<*>,
+            completion: Continuation<Any?>,
+            continuation: Continuation<Any?>,
             function: MethodId
-    ): Continuation<*> {
+    ): WeakContinuation {
         thread = Thread.currentThread()
         status = CoroutineStatus.Running
         if (stack.isEmpty()) {
             require(initialCompletion === completion)
-            topContinuation = continuation
-            stack.add(0, CoroutineStackFrame(ContinuationId(continuation),
+            topContinuation = WeakContinuation(continuation)
+            stack.add(0, CoroutineStackFrame(ContinuationId(topContinuation),
                     DoResumeCall(function, MethodId.UNKNOWN, CallPosition.UNKNOWN)))
-            return continuation
+            return topContinuation
         }
-        topContinuation = continuation
-        topFrameCompletion = completion
-        val framesToRemove = stack.indexOfLast { it.id is CompletionId && it.id.value === continuation } + 1
+        topContinuation = WeakContinuation(continuation)
+        topFrameCompletion = WeakContinuation(completion)
+        val framesToRemove =
+                stack.indexOfLast { it.id is CompletionId && it.id.value.continuation === continuation } + 1
         debug { "framesToRemove: $framesToRemove" }
         stack.dropInplace(framesToRemove)
         debug { "result stack size: ${stack.size}" }
-        return completion
+        return topFrameCompletion
     }
 }
 

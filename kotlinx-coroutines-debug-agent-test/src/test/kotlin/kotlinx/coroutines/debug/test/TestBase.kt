@@ -68,7 +68,7 @@ open class TestBase {
     private var stateIndex = AtomicInteger(0)
 
     private val onStateChanged = { manager: StacksManager, event: StackChangedEvent, _: WrappedContext ->
-        if (event == Suspended) {
+        if (event == Suspended && expectedStates.isNotEmpty()) {
             val currentState = stateIndex.getAndIncrement()
             val expected = expectedStates[currentState]
             if (expected == null) println("no check for state: $currentState")
@@ -95,9 +95,9 @@ open class TestBase {
     }
 
     companion object {
-        var LOG_LEVEL = "debug"
+        var LOG_LEVEL = "error"//"debug"
         private val AGENT_JAR_PATH = "../kotlinx-coroutines-debug-agent/build/libs/coroutines-debug-agent.jar"
-        private val AGENT_ARGUMENTS = "loglevel=${LOG_LEVEL},datafile=data.all" // "datafile=" to suppress data output
+        private val AGENT_ARGUMENTS = "loglevel=${LOG_LEVEL}"
 
         @BeforeClass
         @JvmStatic

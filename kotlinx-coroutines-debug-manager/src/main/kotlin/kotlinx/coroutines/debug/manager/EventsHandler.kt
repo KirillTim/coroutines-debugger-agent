@@ -10,12 +10,12 @@ import kotlin.coroutines.experimental.jvm.internal.CoroutineImpl
  * @author Kirill Timofeev
  */
 // used from instrumented code
-fun handleAfterSuspendCall(result: Any, continuation: Continuation<*>, functionCallIndex: Int) {
+fun handleAfterSuspendCall(result: Any, continuation: Continuation<Any?>, functionCallIndex: Int) {
     if (result !== COROUTINE_SUSPENDED) return
     handleSuspendedCall(continuation, functionCallIndex)
 }
 
-private fun handleSuspendedCall(continuation: Continuation<*>, functionCallIndex: Int) {
+private fun handleSuspendedCall(continuation: Continuation<Any?>, functionCallIndex: Int) {
     val call = allSuspendCalls[functionCallIndex]
     try {
         StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
@@ -28,17 +28,17 @@ private fun handleSuspendedCall(continuation: Continuation<*>, functionCallIndex
 }
 
 // used from instrumented code
-fun handleDoResumeEnter(completion: Continuation<*>, continuation: Continuation<*>, doResumeIndex: Int) =
+fun handleDoResumeEnter(completion: Continuation<Any?>, continuation: Continuation<Any?>, doResumeIndex: Int) =
         StacksManager.handleDoResumeEnter(completion, continuation, knownDoResumeFunctions[doResumeIndex])
 
 // used from instrumented code
-fun maybeWrapCompletionAndCreateNewCoroutine(completion: Continuation<Any?>?): Continuation<*> {
+fun maybeWrapCompletionAndCreateNewCoroutine(completion: Continuation<Any?>): Continuation<*> {
     if (completion is CoroutineImpl) {
         debugPrintExistingCoroutine(completion)
         return completion
     }
-    val wrapped = WrappedCompletion(completion)
-    debug { "wrapping completion: ${completion!!.prettyHash}" }
+    val wrapped = WrappedCompletion(WeakContinuation(completion))
+    debug { "wrapping completion: ${completion.prettyHash}" }
     StacksManager.handleNewCoroutineCreated(wrapped)
     return wrapped
 }
