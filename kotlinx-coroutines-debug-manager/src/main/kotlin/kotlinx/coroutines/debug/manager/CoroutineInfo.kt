@@ -116,7 +116,7 @@ data class FullCoroutineSnapshot(val coroutines: List<CoroutineSnapshot>) {
             append("${it.name} ${it.context.name} ${it.context.name} ${it.status} ${it.thread}\n")
             if (it.coroutineStack.isNotEmpty())
                 append(it.coroutineStack.joinToString(separator = "\n", prefix = "coroutine stack:\n", postfix = "\n"))
-            if (it.status !is CoroutineStatus.Suspended && it.threadStack.isNotEmpty())
+            if (it.status != CoroutineStatus.Suspended && it.threadStack.isNotEmpty())
                 append(it.threadStack.joinToString(separator = "\n", prefix = "thread stack:\n", postfix = "\n"))
             append("\n")
         }

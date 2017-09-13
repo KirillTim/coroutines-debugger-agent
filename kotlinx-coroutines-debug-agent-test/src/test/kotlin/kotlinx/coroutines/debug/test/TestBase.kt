@@ -2,7 +2,6 @@ package kotlinx.coroutines.debug.test
 
 import com.sun.tools.attach.VirtualMachine
 import kotlinx.coroutines.debug.manager.*
-import kotlinx.coroutines.debug.manager.Suspended
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
@@ -68,12 +67,12 @@ open class TestBase {
     private var stateIndex = AtomicInteger(0)
 
     private val onStateChanged = { manager: StacksManager, event: StackChangedEvent, _: WrappedContext ->
-        if (event == Suspended && expectedStates.isNotEmpty()) {
+        if (event == StackChangedEvent.Suspended && expectedStates.isNotEmpty()) {
             val currentState = stateIndex.getAndIncrement()
             val expected = expectedStates[currentState]
             if (expected == null) println("no check for state: $currentState")
             else {
-                val actual = manager.getSnapshot().coroutines.filter { it.status is CoroutineStatus.Suspended }
+                val actual = manager.getSnapshot().coroutines.filter { it.status == CoroutineStatus.Suspended }
                         .map { it.coroutineInfo(Thread.currentThread(), Configuration.Debug).toString() }
                         .map { extractNameFromCoroutineDump(it) to it }.toMap()
                 assertMatches(expected.coroutines, actual)
@@ -84,13 +83,15 @@ open class TestBase {
     @Before
     fun addCallback() {
         expectedStates.clear()
+        StacksManager.reset()
+        exceptions = AppendOnlyThreadSafeList()
         StacksManager.addOnStackChangedCallback(onStateChanged)
     }
 
     @After
     fun onCompletion() {
-        Assert.assertTrue("exceptions were thrown: ${exceptions.toList()}", exceptions.isEmpty())
-        exceptions.clear()
+        Assert.assertTrue("exceptions were thrown: ${exceptions!!.toList()}", exceptions!!.isEmpty())
+        exceptions = null
         StacksManager.removeOnStackChangedCallback(onStateChanged)
     }
 
@@ -122,7 +123,7 @@ open class TestBase {
             Assert.assertTrue("expected nothing, got: $coroutines", coroutines.isEmpty())
         }
 
-        fun expectNoSuspendCoroutines() = expectNoCoroutines({ status is CoroutineStatus.Suspended })
+        fun expectNoSuspendCoroutines() = expectNoCoroutines({ status == CoroutineStatus.Suspended })
 
         fun expectNextSuspendedState(vararg coroutines: Coroutine) {
             expectedStates[nextExpectedIndex.getAndIncrement()] = ExpectedState(coroutines.toList())

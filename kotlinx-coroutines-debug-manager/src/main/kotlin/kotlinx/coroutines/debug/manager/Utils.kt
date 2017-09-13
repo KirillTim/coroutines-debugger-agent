@@ -10,11 +10,11 @@ import java.lang.reflect.Modifier
 
 fun Any?.toStringSafe() = try {
     toString()
-} catch (e: Exception) {
+} catch (e: Throwable) {
     "<can't be printed ($e)>"
 }
 
-fun Exception.stackTraceToString(): String {
+fun Throwable.stackTraceToString(): String {
     val writer = StringWriter()
     printStackTrace(PrintWriter(writer))
     return writer.toString()

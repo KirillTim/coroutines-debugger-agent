@@ -1,6 +1,7 @@
 package kotlinx.coroutines.debug.agent
 
 import kotlinx.coroutines.debug.manager.*
+import kotlinx.coroutines.debug.manager.StackChangedEvent.*
 import kotlinx.coroutines.debug.transformer.CoroutinesDebugTransformer
 import sun.misc.Signal
 import java.io.FileOutputStream

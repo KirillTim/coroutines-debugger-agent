@@ -56,7 +56,7 @@ class GeneratorsTest : TestBase() {
     }
 
     @Test
-    fun twoGeneratorsTest() {
+    fun twoGeneratorsTest() { //FIXME: coroutines numeration
         val N = 2
         expectNextSuspendedState(coroutine("coroutine$0", SUSPENDED_AT_YIELD) {
             method("$TEST_PACKAGE_PREFIX.GeneratorsTestMethods\$repeatA\$1.invoke")
