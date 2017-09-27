@@ -8,6 +8,7 @@ import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.ClassNode
 import org.jetbrains.org.objectweb.asm.tree.MethodInsnNode
 import org.jetbrains.org.objectweb.asm.tree.MethodNode
+import org.jetbrains.org.objectweb.asm.tree.VarInsnNode
 import java.lang.instrument.ClassFileTransformer
 import java.security.ProtectionDomain
 
@@ -18,8 +19,16 @@ private fun argumentVarIndex(argumentTypes: Array<Type>, argumentIndex: Int) =
         argumentTypes.take(argumentIndex).map { it.size }.sum()
 
 private fun MethodNode.findContinuationVarIndex(classNode: ClassNode): Int {
+    // after kotlin 1.1.4-3 continuation for named function isn't stored into the same slot where continuation parameter
+    // of function is located, so we should look at slot from where state machine extract its index
     if (classNode.isCoroutineImplOrSubType()) return 0 //index of `this`
     require(isSuspend(), { "Method should be suspend, got $desc instead" })
+    val fsm = instructions.sequence.firstOrNull { it.isStateMachineStartsHere() }
+    if (fsm != null) {
+        val loadContinuationInsn = fsm.nextMeaningful?.nextMeaningful
+        return requireNotNull(loadContinuationInsn as VarInsnNode, { "loadContinuationInsn should be VarInsnNode" }).`var`
+    }
+    // fallback strategy (i have no idea how to handle this)
     val continuationArgIndex = Type.getType(desc).argumentTypes.size - continuationOffsetFromEndInDesc(name)
     val isStatic = access and Opcodes.ACC_STATIC != 0
     return argumentVarIndex(Type.getArgumentTypes(desc), continuationArgIndex) + if (isStatic) 0 else 1
