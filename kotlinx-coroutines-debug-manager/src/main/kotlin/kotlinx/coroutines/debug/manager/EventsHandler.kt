@@ -9,9 +9,9 @@ import kotlin.coroutines.experimental.jvm.internal.CoroutineImpl
 var exceptions: AppendOnlyThreadSafeList<Throwable>? = null
 
 // used from instrumented code
-fun handleAfterSuspendCall(result: Any, continuation: Continuation<Any?>, functionCallIndex: Int) {
+fun handleAfterSuspendCall(result: Any, continuation: Continuation<Any?>, functionCallKey: String) {
     if (result !== COROUTINE_SUSPENDED) return
-    handleSuspendedCall(continuation, functionCallIndex)
+    handleSuspendedCall(continuation, functionCallKey)
 }
 
 inline fun handle(message: () -> String, body: () -> Unit) {
@@ -23,16 +23,16 @@ inline fun handle(message: () -> String, body: () -> Unit) {
     }
 }
 
-private fun handleSuspendedCall(continuation: Continuation<Any?>, functionCallIndex: Int) {
-    val call = allSuspendCalls[functionCallIndex]
+private fun handleSuspendedCall(continuation: Continuation<Any?>, functionCallKey: String) {
+    val call = allSuspendCallsMap[functionCallKey]!!
     handle({ "handleAfterSuspendCall(${continuation.toStringSafe()}, $call)" }) {
         StacksManager.handleAfterSuspendFunctionReturn(continuation, call)
     }
 }
 
 // used from instrumented code
-fun handleDoResumeEnter(completion: Continuation<Any?>, continuation: Continuation<Any?>, doResumeIndex: Int) {
-    val func = knownDoResumeFunctions[doResumeIndex]
+fun handleDoResumeEnter(completion: Continuation<Any?>, continuation: Continuation<Any?>, doResumeKey: String) {
+    val func = knownDoResumeFunctionsMap[doResumeKey]!!
     handle({ "handleDoResumeEnter(${completion.toStringSafe()}, ${continuation.toStringSafe()}, $func)" }) {
         StacksManager.handleDoResumeEnter(completion, continuation, func)
     }

@@ -26,27 +26,27 @@ fun generateNewWrappedCompletion(completionIndex: Int) =
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.handleAfterSuspendCall]
- * with continuation and index of function call from [kotlinx.coroutines.debug.manager.allSuspendCalls] list
+ * with continuation and key of function call from [kotlinx.coroutines.debug.manager.allSuspendCallsMap] map
  */
-fun generateAfterSuspendCall(continuationVarIndex: Int, functionCallIndex: Int) =
+fun generateAfterSuspendCall(continuationVarIndex: Int, functionCallKey: String) =
         code {
             dup()
             load(continuationVarIndex, CONTINUATION_TYPE)
-            aconst(functionCallIndex)
+            aconst(functionCallKey)
             visitMethodInsn(Opcodes.INVOKESTATIC, EVENTS_HANDLER_CLASS_NAME, AFTER_SUSPEND_CALL,
-                    "(${OBJECT_TYPE.descriptor}${CONTINUATION_TYPE.descriptor}I)V", false)
+                    "(${OBJECT_TYPE.descriptor}${CONTINUATION_TYPE.descriptor}${STRING_TYPE.descriptor})V", false)
         }
 
 /**
  * Generate call of [kotlinx.coroutines.debug.manager.handleDoResumeEnter] with continuation
- * and index of doResume function in [kotlinx.coroutines.debug.manager.knownDoResumeFunctions] list
+ * and key of doResume function in [kotlinx.coroutines.debug.manager.knownDoResumeFunctionsMap] map
  */
-fun generateHandleDoResumeCallEnter(continuationVarIndex: Int, doResumeIndex: Int) =
+fun generateHandleDoResumeCallEnter(continuationVarIndex: Int, doResumeKey: String) =
         code {
             load(0, COROUTINE_IMPL_TYPE)
             getfield(COROUTINE_IMPL_TYPE.descriptor, "completion", CONTINUATION_TYPE.descriptor)
             load(continuationVarIndex, CONTINUATION_TYPE)
-            aconst(doResumeIndex)
+            aconst(doResumeKey)
             visitMethodInsn(Opcodes.INVOKESTATIC, EVENTS_HANDLER_CLASS_NAME, DO_RESUME_ENTER,
-                    "(${CONTINUATION_TYPE.descriptor}${CONTINUATION_TYPE.descriptor}I)V", false)
+                    "(${CONTINUATION_TYPE.descriptor}${CONTINUATION_TYPE.descriptor}${STRING_TYPE.descriptor})V", false)
         }

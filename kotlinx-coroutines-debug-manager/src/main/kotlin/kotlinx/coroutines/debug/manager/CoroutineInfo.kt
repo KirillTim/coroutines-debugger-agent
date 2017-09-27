@@ -61,7 +61,7 @@ private fun removeInvokeBeforeDoResume(stack: List<StackTraceElement>): List<Sta
 }
 
 private fun isSuspendLambdaDoResume(stack: List<StackTraceElement>, atDoResumeIndex: Int): Boolean {
-    if (knownDoResumeFunctions.none { it.equalsTo(stack[atDoResumeIndex]) }) return false
+    if (knownDoResumeFunctionsMap.values.none { it.equalsTo(stack[atDoResumeIndex]) }) return false
     val lambdaObjectClassName = stack[atDoResumeIndex].className
     if (atDoResumeIndex + 1 > stack.lastIndex
             || stack[atDoResumeIndex + 1].methodName != "invoke"
@@ -70,7 +70,7 @@ private fun isSuspendLambdaDoResume(stack: List<StackTraceElement>, atDoResumeIn
     if (atDoResumeIndex + 2 > stack.lastIndex
             || stack[atDoResumeIndex + 2].methodName != "invoke"
             || stack[atDoResumeIndex + 2].className != lambdaObjectClassName) return false
-    return atDoResumeIndex + 3 <= stack.lastIndex && allSuspendCalls.any {
+    return atDoResumeIndex + 3 <= stack.lastIndex && allSuspendCallsMap.values.any {
         it.stackTraceElement == stack[atDoResumeIndex + 3] && it.method.name == "invoke"
     }
 }
@@ -81,11 +81,11 @@ private fun suspendBlockFirstCalls(stack: List<StackTraceElement>): List<Int> {
     var inCoroutine = false
     var index = stack.lastIndex
     while (index >= 0) {
-        if (allSuspendCalls.any { it.stackTraceElement == stack[index] }
-                || knownDoResumeFunctions.any { it.equalsTo(stack[index]) }
-                || (index - 1 > 0 && knownDoResumeFunctions.any { it.equalsTo(stack[index - 1]) })
+        if (allSuspendCallsMap.values.any { it.stackTraceElement == stack[index] }
+                || knownDoResumeFunctionsMap.values.any { it.equalsTo(stack[index]) }
+                || (index - 1 > 0 && knownDoResumeFunctionsMap.values.any { it.equalsTo(stack[index - 1]) })
                 || (stack[index].methodName == "invoke" && index - 1 > 0
-                && knownDoResumeFunctions.any { it.equalsTo(stack[index - 1]) })) {
+                && knownDoResumeFunctionsMap.values.any { it.equalsTo(stack[index - 1]) })) {
             if (!inCoroutine) {
                 coroutineStarts += index
                 inCoroutine = true

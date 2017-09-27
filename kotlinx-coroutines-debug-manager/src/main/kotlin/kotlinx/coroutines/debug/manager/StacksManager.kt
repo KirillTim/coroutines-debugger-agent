@@ -9,9 +9,28 @@ import kotlin.coroutines.experimental.Continuation
 
 val DEBUG_AGENT_PACKAGE_PREFIX = "kotlinx.coroutines.debug"
 
-val allSuspendCalls = AppendOnlyThreadSafeList<SuspendCall>()
+val allSuspendCallsMap = ConcurrentHashMap<String, SuspendCall>()
 
-val knownDoResumeFunctions = AppendOnlyThreadSafeList<MethodId>()
+private fun classNameBasedKey(currentClassName: String, index: Int) = "${currentClassName}_$index"
+
+private fun Collection<String>.lastIndexForClassName(name: String) =
+        filter { it.startsWith("${name}_") }.map { it.split('_')[1].toInt() }.max()
+
+fun putIntoAllSuspendCallsMap(currentClassName: String, call: SuspendCall): String { //TODO: rewrite
+    val lastKeyIndex = allSuspendCallsMap.keys.lastIndexForClassName(currentClassName) ?: -1
+    val key = classNameBasedKey(currentClassName, lastKeyIndex + 1)
+    allSuspendCallsMap[key] = call
+    return key
+}
+
+val knownDoResumeFunctionsMap = ConcurrentHashMap<String, MethodId>()
+
+fun putIntoKnownDoResumeFunctionsMap(currentClassName: String, method: MethodId): String {
+    val lastKeyIndex = knownDoResumeFunctionsMap.keys.lastIndexForClassName(currentClassName) ?: -1
+    val key = classNameBasedKey(currentClassName, lastKeyIndex + 1)
+    knownDoResumeFunctionsMap[key] = method
+    return key
+}
 
 enum class StackChangedEvent { Created, Suspended, Removed, WakedUp }
 
